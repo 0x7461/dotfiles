@@ -23,6 +23,11 @@
 ### Windows
 1. Installation
     - Settings > System > Recovery > Reset
+    - winutil > microwin
+    - Choose World as the region when installing
+    - To enable offline install: Shift+F10 > oobe\bypassnro
+    - Create a local account to use Windows without a Microsoft account
+    - If no disk found, download the driver, extract it into another USB to install
 
 2. Debloat & Improvements
     1. ShutUp10++ — [link](https://www.oo-software.com/en/shutup10)
