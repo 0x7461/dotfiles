@@ -1,2 +1,1 @@
-# Arch
-Things relate to Arch Linux
+# Arch Linux 2025
