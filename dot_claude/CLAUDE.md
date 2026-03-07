@@ -45,7 +45,10 @@ At task completion, silently route doc-worthy content: tool/build/errors → PLA
 - **rustup** manages Rust (not proto): `rustc --version`, `cargo`.
 
 ## Known Gotchas
-- **SSH key for GitHub:** key is `~/.ssh/id_ed25519_gh` (not `id_ed25519`). Always use `git@github.com:` URLs, never HTTPS. Two options: (1) inline: `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_gh" git clone git@github.com:...` (2) agent: `eval $(ssh-agent -s) && ssh-add ~/.ssh/id_ed25519_gh`.
+- **SSH key for GitHub:** key is `~/.ssh/id_ed25519_gh` (not `id_ed25519`). Always use `git@github.com:` URLs, never HTTPS. Two options: (1) inline: `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_gh" git clone git@github.com:...` (2) agent: `eval $(ssh-agent -s) && ssh-add ~/.ssh/id_ed25519_gh`. Also needed for `chezmoi git -- push`.
+- **chezmoi secret detection:** blocks `chezmoi add` even with `--force` (exit 1), but the file IS added to source dir. Workaround: let it warn, then manually edit the `.tmpl` file to replace secret with `{{ .varName }}`, store value in `~/.config/chezmoi/chezmoi.toml` under `[data]`.
+- **chezmoi forget in non-TTY:** requires `--force` flag (can't open `/dev/tty` for confirmation prompt).
+- **chezmoi add on dirs with binaries:** very slow + false-positive secret warnings. Add specific files/subdirs rather than whole dirs when binaries are present.
 - **mpv on Wayland:** Without `WAYLAND_DISPLAY` set, mpv falls back to DRM (fails with "Permission denied"). Fix: `vo=dmabuf-wayland` in `~/.config/mpv/mpv.conf`.
 - **File integrity check:** `ffmpeg -v error -i file -f null - 2>&1` — no output = good file. Catches truncated downloads, HTML saved as mp4, corrupt muxes.
 - **Skills:** `~/.claude/skills/<name>/SKILL.md` — not `commands/`. Frontmatter: name, description, user-invocable, allowed-tools.
