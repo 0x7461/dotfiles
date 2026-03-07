@@ -1,0 +1,7 @@
+long_uptime = true
+current_shell = true
+physical_cores = true
+memory_percentage = true
+disk_space_percentage = true
+theme = "catppuccin-macchiato"
+show = ["Host", "Machine", "Kernel", "Distribution", "WindowManager", "Packages", "Shell", "Terminal", "Resolution", "Uptime", "Processor", "ProcessorLoad", "Memory", "Battery", "GPU", "DiskSpace", "LocalIP"]

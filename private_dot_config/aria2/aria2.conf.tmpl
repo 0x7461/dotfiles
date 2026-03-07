@@ -1,0 +1,34 @@
+# aria2 global config
+
+# Downloads
+dir=/home/ta/Downloads
+continue=true
+max-concurrent-downloads=5
+max-connection-per-server=16
+split=16
+min-split-size=1M
+
+# Retry
+max-tries=5
+retry-wait=10
+timeout=600
+
+# Console
+console-log-level=notice
+summary-interval=0
+
+# BitTorrent
+bt-save-metadata=true
+bt-seed-unverified=false
+seed-ratio=1.0
+seed-time=60
+
+# File
+file-allocation=falloc
+auto-file-renaming=true
+
+# RPC daemon
+enable-rpc=true
+rpc-listen-port=6800
+rpc-secret={{ .aria2RpcSecret }}
+rpc-listen-all=false

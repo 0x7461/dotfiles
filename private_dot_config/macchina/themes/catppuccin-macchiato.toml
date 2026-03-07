@@ -1,0 +1,49 @@
+# Catppuccin Macchiato theme for macchina
+
+spacing         = 2
+padding         = 0
+hide_ascii      = false
+separator       = ">"
+key_color       = "#8bd5ca"
+separator_color = "#6e738d"
+
+[palette]
+type = "Full"
+visible = false
+
+[bar]
+visible         = false
+
+[custom_ascii]
+color           = "#cad3f5"
+path            = "~/.config/macchina/ascii/tux.txt"
+
+[box]
+border          = "rounded"
+visible         = true
+
+[box.inner_margin]
+x               = 1
+y               = 0
+
+[keys]
+host            = "Host"
+kernel          = "Kernel"
+battery         = "Battery"
+os              = "OS"
+de              = "DE"
+wm              = "WM"
+distro          = "Distro"
+terminal        = "Terminal"
+shell           = "Shell"
+packages        = "Packages"
+uptime          = "Uptime"
+memory          = "Memory"
+machine         = "Machine"
+local_ip        = "Local IP"
+backlight       = "Brightness"
+resolution      = "Resolution"
+cpu_load        = "CPU Load"
+cpu             = "CPU"
+gpu             = "GPU"
+disk_space      = "Disk Space"

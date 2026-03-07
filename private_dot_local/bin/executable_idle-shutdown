@@ -1,0 +1,7 @@
+#!/bin/sh
+# Shutdown on idle only when on battery.
+# On AC power, do nothing — keep the laptop running for SSH access.
+
+if [ "$(cat /sys/class/power_supply/AC/online)" = "0" ]; then
+    loginctl shutdown
+fi

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Clean old Claude Code sessions for a project directory.
+# Keeps all entries sharing the UUID of the most recently modified session,
+# plus the memory/ directory.
+# Usage: claude-clean-sessions [--dry-run] [project-dir]
+
+set -euo pipefail
+
+DRY_RUN=0
+if [[ "${1:-}" == "--dry-run" ]]; then
+  DRY_RUN=1
+  shift
+fi
+
+SESSION_DIR="${1:-$HOME/.claude/projects/-home-ta}"
+
+if [[ ! -d "$SESSION_DIR" ]]; then
+  echo "Directory not found: $SESSION_DIR"
+  exit 1
+fi
+
+# Find the most recently modified entry (excluding memory/), then strip .jsonl
+# to get the bare UUID stem. Both the .jsonl and companion directory share this stem.
+NEWEST_ENTRY=$(ls -t "$SESSION_DIR" | grep -v '^memory$' | head -1)
+KEEP_STEM="${NEWEST_ENTRY%.jsonl}"
+
+echo "Session dir : $SESSION_DIR"
+echo "Keeping     : $KEEP_STEM (all entries with this UUID)"
+echo ""
+
+count=0
+for item in "$SESSION_DIR"/*; do
+  name=$(basename "$item")
+  stem="${name%.jsonl}"
+
+  [[ "$name" == "memory" ]] && continue
+  [[ "$stem" == "$KEEP_STEM" ]] && continue
+
+  if (( DRY_RUN )); then
+    echo "[dry-run] would remove: $name"
+  else
+    echo "Removing: $name"
+    rm -rf "$item"
+  fi
+  (( count++ )) || true
+done
+
+echo ""
+if (( DRY_RUN )); then
+  echo "Would remove $count old session(s). Run without --dry-run to delete."
+else
+  echo "Removed $count old session(s)."
+fi

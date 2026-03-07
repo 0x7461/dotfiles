@@ -1,0 +1,12 @@
+#!/bin/sh
+text=$(echo "" | wofi --dmenu --prompt "Capture" --lines 1 --width 600)
+[ -z "$text" ] && exit 0
+curl -sf -X POST http://localhost:8765/capture \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": $(printf '%s' "$text" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" \
+  | python3 -c "
+import json, sys, subprocess
+r = json.load(sys.stdin)
+msg = '[{}] {}'.format(r['type'], r['data'].get('text', r.get('raw', '')))
+subprocess.run(['notify-send', 'Quick Capture', msg, '--expire-time=3000'])
+"

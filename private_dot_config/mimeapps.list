@@ -1,0 +1,25 @@
+
+[Default Applications]
+image/jpeg=imv.desktop
+image/png=imv.desktop
+image/gif=imv.desktop
+image/webp=imv.desktop
+image/bmp=imv.desktop
+image/tiff=imv.desktop
+image/avif=imv.desktop
+image/heic=imv.desktop
+text/html=nvim.desktop
+video/webm=mpv.desktop
+image/x-canon-cr2=org.darktable.darktable-wayland.desktop
+image/x-nikon-nef=org.darktable.darktable-wayland.desktop
+image/x-sony-arw=org.darktable.darktable-wayland.desktop
+image/x-fuji-raf=org.darktable.darktable-wayland.desktop
+image/x-adobe-dng=org.darktable.darktable-wayland.desktop
+image/x-olympus-orf=org.darktable.darktable-wayland.desktop
+image/x-panasonic-rw2=org.darktable.darktable-wayland.desktop
+image/x-pentax-pef=org.darktable.darktable-wayland.desktop
+image/x-sigma-x3f=org.darktable.darktable-wayland.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/about=firefox.desktop
+x-scheme-handler/unknown=firefox.desktop

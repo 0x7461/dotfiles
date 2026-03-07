@@ -1,0 +1,4 @@
+#!/bin/sh
+# Switch fcitx5 input method via wofi
+choice=$(fcitx5-remote -l | wofi --dmenu --prompt "Input Method")
+[ -n "$choice" ] && fcitx5-remote -s "$choice"

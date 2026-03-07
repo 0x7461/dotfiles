@@ -1,0 +1,8 @@
+# GCC version requirements for packages
+# Format: package_name = "major.minor"
+# Packages listed here will show a warning badge if the system GCC
+# is older than the required version, and builds will be blocked.
+
+[requirements]
+hyprland = "15.0"
+hyprland-qt-support = "15.0"

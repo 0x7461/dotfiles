@@ -1,0 +1,30 @@
+font=Monospace 12
+width=300
+height=300
+margin=10
+padding=8
+border-size=2
+border-radius=8
+border-color=#8aadf4
+background-color=#24273a
+text-color=#cad3f5
+default-timeout=5000
+group-by=app-name
+icon-path=/usr/share/icons/Adwaita
+max-icon-size=64
+layer=overlay
+anchor=top-right
+
+[app-name="Claude Code"]
+invisible=1
+
+[urgency=low]
+border-color=#8aadf4
+background-color=#24273a
+text-color=#cad3f5
+
+[urgency=critical]
+border-color=#f5a97f
+background-color=#24273a
+text-color=#cad3f5
+default-timeout=0
