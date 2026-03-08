@@ -51,7 +51,7 @@ At task completion, silently route doc-worthy content: tool/build/errors → PLA
 - **chezmoi add on dirs with binaries:** very slow + false-positive secret warnings. Add specific files/subdirs rather than whole dirs when binaries are present.
 - **mpv on Wayland:** Without `WAYLAND_DISPLAY` set, mpv falls back to DRM (fails with "Permission denied"). Fix: `vo=dmabuf-wayland` in `~/.config/mpv/mpv.conf`.
 - **File integrity check:** `ffmpeg -v error -i file -f null - 2>&1` — no output = good file. Catches truncated downloads, HTML saved as mp4, corrupt muxes.
-- **Skills:** `~/.claude/skills/<name>/SKILL.md` — not `commands/`. Frontmatter: name, description, user-invocable, allowed-tools.
+- **Skills:** `~/.claude/skills/<name>/SKILL.md` — not `commands/`. Frontmatter: name, description, user-invocable, allowed-tools. Skills that call deferred tools (Bash, Edit, etc.) must include a step to load them via `ToolSearch select:<ToolName>` first — otherwise the call fails with "Invalid tool parameters".
 - **wob FIFO:** Blocks if no reader — use `timeout` wrapper. See memory/debugging.md.
 - **settings.local.json:** Edit tool fails mid-edit — always use Write tool to rewrite cleanly.
 - **Hooks — Stop event:** Fires after every response turn, not session end.
@@ -64,6 +64,7 @@ At task completion, silently route doc-worthy content: tool/build/errors → PLA
 - **Rootless Podman bind mounts:** `user: "UID:GID"` in compose maps container UID to a sub-uid on host, not the file owner. Fix: `chmod 777` on mounted dirs.
 - **podman-compose `depends_on` override:** Doesn't merge cleanly — disabled services still block startup. Use a standalone `compose.yaml` instead of override files.
 - **runit + dotenv CWD:** `godotenv.Load()` (and equivalents) resolves `.env` relative to CWD. runit does not set CWD to the project dir — add `cd /path/to/project` before `exec` in the run script.
+- **runit user services:** live in `~/service/`, not `/var/service/`. Use `SVDIR=~/service sv <cmd>` to manage them (e.g. `SVDIR=~/service sv restart rss-bot`).
 - **zstd not installed by default on Void:** needed to inspect `.tar.zst` files. Install with `sudo xbps-install zstd`.
 - **xbps-src .deb repack:** sandbox has no `tar` — use `bsdtar` in `do_extract`. Pattern: `ar x foo.deb && bsdtar -xf data.tar.gz`.
 - **Dead code in Rust:** never use `#[allow(dead_code)]` — delete the unused code instead.

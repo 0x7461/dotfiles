@@ -15,6 +15,13 @@ if status is-interactive
 	end
 end
 
+# Auto-start Hyprland on TTY1 login (with D-Bus session)
+if status is-login
+    if test -z "$WAYLAND_DISPLAY"; and test "$XDG_VTNR" = "1"
+        exec dbus-run-session -- Hyprland
+    end
+end
+
 # proto
 set -gx PROTO_HOME "$HOME/.proto";
 set -gx PATH "$PROTO_HOME/shims" "$PROTO_HOME/bin" $PATH;

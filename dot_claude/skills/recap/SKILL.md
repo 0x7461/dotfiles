@@ -10,7 +10,11 @@ Show a summary of recent Claude Code sessions.
 
 ## Steps
 
-### 1. Run the recap script
+### 1. Load required tools
+
+Call `ToolSearch` with query `select:Bash` to ensure the Bash tool is loaded before use.
+
+### 2. Run the recap script
 
 ```sh
 uv run python3 ~/.claude/scripts/recap.py $DAYS
@@ -18,11 +22,11 @@ uv run python3 ~/.claude/scripts/recap.py $DAYS
 
 Where `$DAYS` is the argument passed by the user (default: 3 if not provided).
 
-### 2. Display the output
+### 3. Display the output
 
 Show the session summary as-is — it's already formatted.
 
-### 3. Offer to dig deeper
+### 4. Offer to dig deeper
 
 After showing the summary, ask if the user wants to:
 - See more messages from a specific session
