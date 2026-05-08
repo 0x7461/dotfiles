@@ -16,20 +16,26 @@ Call `ToolSearch` with query `select:Bash` to ensure the Bash tool is loaded bef
 
 ### 2. Run the recap script
 
+Summary mode (default):
 ```sh
 uv run python3 ~/.claude/scripts/recap.py $DAYS
 ```
 
-Where `$DAYS` is the argument passed by the user (default: 3 if not provided).
+Session detail mode (full conversation dump):
+```sh
+uv run python3 ~/.claude/scripts/recap.py $DAYS --session $SESSION_ID
+```
+
+Where `$DAYS` is the argument passed by the user (default: 3), and `$SESSION_ID` is the 8-char prefix shown in brackets in the summary output. Prefix matching is supported — shortest unambiguous prefix works.
 
 ### 3. Display the output
 
-Show the session summary as-is — it's already formatted.
+Show the output as-is — it's already formatted.
 
 ### 4. Offer to dig deeper
 
 After showing the summary, ask if the user wants to:
-- See more messages from a specific session
+- Use `--session <id>` to read the full conversation of a specific session
 - Resume working on something from a past session
 - Check what changed in a specific project
 
@@ -38,6 +44,7 @@ After showing the summary, ask if the user wants to:
 - Sessions are identified by their first 8 chars of UUID shown in brackets
 - The project path shows where Claude Code was running at the time
 - Timestamps are local time
+- **Telegram section**: shows recent conversations with The Smartass bot (ai-agent), grouped by 30min gaps. First and last user messages shown as topic indicators. Offer to continue any Telegram thread in the current CC session.
 
 ## Token burn rate
 

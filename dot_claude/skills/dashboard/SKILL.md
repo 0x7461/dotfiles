@@ -30,7 +30,7 @@ Recent sync activity:
 ```sh
 # Last sync entries per service
 for log in ~/service/archiver/log/main/current ~/service/archiver-stories/log/main/current; do
-  [ -f "$log" ] && echo "=== $(basename $(dirname $(dirname "$log"))) ===" && grep -E "(Syncing|Done:|Saved:|Failed:|No active)" "$log" | tail -10
+  [ -f "$log" ] && echo "=== $(basename $(dirname $(dirname $(dirname "$log")))) ===" && grep -E "(Syncing|Done:|Saved:|Failed:|No active)" "$log" | tail -10
 done
 ```
 
@@ -67,8 +67,8 @@ Scan PLAN.md files for open items:
 ```sh
 for plan in ~/projects/*/PLAN.md; do
   project=$(basename $(dirname "$plan"))
-  open=$(grep -c '^\- \[ \]' "$plan" 2>/dev/null || echo 0)
-  [ "$open" -gt 0 ] && echo "$project: $open open task(s)"
+  open=$(grep -c '^\- \[ \]' "$plan" 2>/dev/null || true)
+  [ "$open" -gt 0 ] && echo "$project: $open open task(s)" || true
 done
 ```
 

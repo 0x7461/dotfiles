@@ -26,7 +26,8 @@ All commands run from `~/projects/archiver` with `uv run archiver`.
 
 1. Show runit service status:
 ```sh
-sv status ~/service/archiver ~/service/archiver-stories
+SVDIR=~/service sv status archiver
+SVDIR=~/service sv status archiver-stories
 ```
 
 2. Show recent logs:
@@ -96,7 +97,7 @@ Default: 12h. Use after manual rate limit detection.
 - Runit services: `~/service/archiver` (daily sync via snooze), `~/service/archiver-stories` (stories)
 - Logs: `~/service/archiver/log/main/current`, `~/service/archiver-stories/log/main/current`
 - Archive location: `~/archive/`
-- Config: `~/archive/config.json` (gitignored — never read or display credentials)
-- DB: `~/archive/archiver.db` (SQLite — track downloaded items)
+- Config: `~/projects/archiver/config.json` (gitignored — never read or display credentials)
+- DB: `~/projects/archiver/archiver.db` (SQLite — track downloaded items)
 - Rate limits: Facebook 5-15s, Instagram 3-8s, TikTok/YouTube via yt-dlp sleep intervals
 - RateLimitError auto-triggers 12h skip for the affected account

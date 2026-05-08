@@ -54,7 +54,7 @@ Always read `~/projects/IDEAS.md` first to understand the current structure, hig
 
 ### 4. Place the entry correctly
 
-- New ideas go before the `## Prioritization` section (after the last numbered `##` entry)
+- New ideas go before the `## Tools to Watch` section (after the last numbered `##` entry)
 - Keep the `---` separator between entries
 - Do NOT modify the Prioritization, Clusters, or Tools to Watch sections unless explicitly asked
 
