@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=File Manager (yazi)
+Comment=Launch yazi in Ghostty
+Exec=ghostty -e yazi
+Terminal=false
+Type=Application
+Icon=system-file-manager

@@ -15,7 +15,12 @@ max-icon-size=64
 layer=overlay
 anchor=top-right
 
-[app-name="Claude Code"]
+# CC fires notifications via two channels simultaneously:
+# 1. claude-code-hook — direct D-Bus (always fires, terminal-agnostic)
+# 2. OSC 9 escape code → Ghostty forwards to D-Bus (only in Ghostty)
+# Suppress the direct one so only Ghostty's native notification shows.
+# If CC is ever run in a non-OSC9 terminal, re-enable this.
+[app-name="claude-code-hook"]
 invisible=1
 
 [urgency=low]
