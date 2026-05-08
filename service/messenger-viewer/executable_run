@@ -1,0 +1,3 @@
+#!/bin/sh
+cd /home/ta/archive/messenger/merged
+exec python3 -m http.server 8787 2>&1

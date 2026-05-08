@@ -1,0 +1,10 @@
+#!/bin/sh
+exec 2>&1
+cd /home/ta/projects/botkit
+
+# Wait until Saturday at 10:00
+# -w6 = Saturday (0=Sunday, 6=Saturday)
+# -H10 = 10 AM
+# -M0 = minute 0
+exec snooze -w6 -H10 -M0 \
+  /home/ta/projects/botkit/bin/gh-bot

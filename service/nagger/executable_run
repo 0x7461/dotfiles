@@ -1,0 +1,4 @@
+#!/bin/sh
+export PATH="/home/ta/.proto/bin:/home/ta/.proto/shims:$PATH"
+cd /home/ta/projects/nagger
+exec snooze -H8-22 -M0 uv run python nag.py 2>&1

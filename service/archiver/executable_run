@@ -1,0 +1,18 @@
+#!/bin/sh
+exec 2>&1
+export HOME=/home/ta
+cd /home/ta/projects/archiver
+
+# On startup: catch up if last sync was missed (>16h ago)
+python3 -c "
+import sqlite3, sys
+from datetime import datetime, timezone, timedelta
+row = sqlite3.connect('archiver.db').execute('SELECT MAX(last_sync) FROM accounts').fetchone()
+last = row[0]
+if not last: sys.exit(0)
+sys.exit(0 if datetime.now(timezone.utc) - datetime.fromisoformat(last) > timedelta(hours=16) else 1)
+" && /home/ta/projects/archiver/.venv/bin/archiver sync
+
+# Run daily at 01:00-04:00 (random hour) with up to 30min jitter
+exec snooze -R3h -H1 -M0 -J1800 \
+  /home/ta/projects/archiver/.venv/bin/archiver sync

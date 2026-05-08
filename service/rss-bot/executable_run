@@ -1,0 +1,7 @@
+#!/bin/sh
+exec 2>&1
+cd /home/ta/projects/botkit
+
+# Run at 8 AM and 8 PM
+exec snooze -H8,20 \
+  /home/ta/projects/botkit/bin/rss-bot

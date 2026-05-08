@@ -1,0 +1,19 @@
+#!/bin/sh
+exec 2>&1
+export HOME=/home/ta
+cd /home/ta/projects/archiver
+
+# On startup: catch up if last facebook stories sync was missed (>16h ago)
+python3 -c "
+import sqlite3, sys
+from datetime import datetime, timezone, timedelta
+row = sqlite3.connect('archiver.db').execute(\"SELECT MAX(last_sync) FROM accounts WHERE platform='facebook'\").fetchone()
+last = row[0]
+if not last: sys.exit(0)
+sys.exit(0 if datetime.now(timezone.utc) - datetime.fromisoformat(last) > timedelta(hours=16) else 1)
+" && /home/ta/projects/archiver/.venv/bin/archiver sync --stories-only
+
+# Run twice daily (every 12h) at random times with 30min jitter
+# Stories expire in 24h — checking every 12h gives comfortable margin
+exec snooze -t /tmp/archiver-stories.snooze -H/12 -M0 -J1800 \
+  /home/ta/projects/archiver/.venv/bin/archiver sync --stories-only
