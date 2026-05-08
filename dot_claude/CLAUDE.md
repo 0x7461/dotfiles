@@ -1,83 +1,89 @@
 # Global Preferences
+<!-- Last updated: 2026-05-06 -->
 
 ## System
 - Void Linux (glibc), Hyprland, runit (not systemd). PipeWire audio. Catppuccin Macchiato theme.
-- Custom packages: built in ~/void-packages, installed with `xi` (sudo). Official repos: `sudo xbps-install`.
-
-## Agreements
-- User runs all sudo commands themselves
-- Project ideas tracked in ~/projects/IDEAS.md
-
-## Documentation Structure
-- `~/projects/IDEAS.md` — project index + status. **Not git-tracked — never commit it.**
-- `~/projects/<proj>/PLAN.md` — per-project plans + technical insights
-- `~/projects/<proj>/INSIGHTS.md` — deep technical notes (where it exists)
-- `~/obsidian-vault/system/*.md` — system knowledge (hyprland, audio, packages, shell…)
-- `~/obsidian-vault/dev/*.md` — dev knowledge base (algorithms, patterns, tools…)
-- `~/.claude/CLAUDE.md` — cross-project rules and gotchas
-
-## Memory Management
-- This file is the single source of truth. **Soft limit: 100 lines** — if limit reached, audit with user before adding: review what's stale or moveable to PLAN.md first.
-- Auto memory (MEMORY.md) is disposable — 200-line hard truncation, don't rely on it.
-- One-liners and pointers only. Link to PLAN.md or debugging.md for details.
+- Custom packages: `~/void-packages` + `xi`. Official: `sudo xbps-install`.
+- User runs all sudo commands themselves.
 
 ## Critical Rules
-- **NEVER delete files from ~/archive without explicit user permission.**
+- **Monthly CC cleanup:** prune MEMORY.md scratchpad, review settings.json for stale flags, check CLAUDE.md is under 200 lines.
 
-## Doc Update Rule
-At task completion, silently route doc-worthy content: tool/build/errors → PLAN.md or INSIGHTS.md; system knowledge → obsidian-vault/system/; dev patterns → obsidian-vault/dev/; status → IDEAS.md; cross-project rules → CLAUDE.md.
-**Threshold:** only if genuinely new/non-obvious. Append: "Updated: X in Y". `/save-learnings` for manual review.
-**Quality:** procedural steps over descriptions. Mark untested: `⚠ untested`. Flag staleness before proceeding.
-**Session check:** on project resume, skim PLAN.md and flag obviously stale items.
+- **NEVER alter or delete files in ~/archive without explicit user permission.** No exceptions.
+- IDEAS.md is **index only** — status + one-liner + link. No research blobs.
+- This file: **soft limit 200 lines.** Be comprehensive on rules I've actually had to enforce — under-specified rules invite rationalization. Cut hedges, examples, and "for instance" padding ruthlessly. Quarterly trim pass.
+- MEMORY.md: disposable scratchpad, 200-line hard truncation.
+- **No `project_*.md` files in memory.** Memory is for behavior + cross-project reference only. Project-specific content goes to that project's PLAN.md.
+- **No INSIGHTS.md / research.md / notes.md files anywhere.** They drift into stale shadow-docs. Deep internals go in PLAN.md `## Internals` / `## Research` sections — same file, easier to keep current.
 
-## Workflow Rules
-- **Read docs before acting:** Check PLAN.md, HYPRLAND.md etc. before starting — don't rediscover.
-- **Background tasks:** Only for independent work. Never background iterative fix-build-check cycles.
-- **Fundamental blockers:** Stop and communicate immediately on compiler/toolchain version issues.
-- **research.md pattern:** For non-trivial features, dump deep research into `research.md` before planning. File persists across sessions; avoids surface-level summaries buried in chat.
-- **Think-first:** For non-trivial implementation asks, ask user's approach first, then evaluate — propose a better direction if one exists. Skip for ops tasks (installs, keybinds, lookups). "Just do it" overrides — nudge only, not a gate.
-- **Don't chain Bash commands with `&&`:** Each chained call runs under one approval, bypassing the allow list. Use separate Bash tool calls for independent operations.
-- **Use Write tool for file creation, not `cat` heredocs:** Write tool is transparent, avoids shebang `!` escaping issues, and is the correct dedicated tool.
+## Documentation
+- `~/projects/IDEAS.md` — project index (slim entries only)
+- `~/projects/<proj>/PLAN.md` — **only per-project doc.** Plans, decisions, build notes, deep internals. Use `## Internals` / `## Research` sections (see Critical Rules: no separate INSIGHTS.md/research.md). Include `Updated: YYYY-MM-DD`. Soft limit ~300 lines.
+- `~/obsidian-vault/system/*.md` — system knowledge | `dev/*.md` — dev knowledge
+- `~/.claude/housekeeping-checklist.md` — trigger-based doc hygiene checklist
 
-## Toolchain Rules
-- **proto** manages runtimes (Go, Python, Node, Bun, uv) — never use system package manager.
-- **uv** for Python (not pip/venv): `uv run`, `uv sync`, `uv add`.
-- **rustup** manages Rust (not proto): `rustc --version`, `cargo`.
+**On project resume:** skim PLAN.md, flag stale items.
+**After tasks:** `/housekeeping` saves learnings + checks consistency.
+**Trim-on-done:** when a roadmap item ships, collapse its detail block into one History line. Don't accumulate ✅-done blocks.
+**Quality bar:** non-obvious only. Procedural steps. `⚠ untested` when applicable.
+
+## Coding Behavior
+
+**Before implementing:**
+- State assumptions explicitly. If interpretations differ, present them — don't pick silently.
+- If unclear or the approach seems wrong, stop and ask. Push back when warranted.
+- Multi-step tasks: state a brief plan with verifiable steps before executing.
+
+**While implementing:**
+- Ask: *"Would a senior engineer say this is overcomplicated?"* If yes, simplify first.
+- Remove imports/vars/functions YOUR changes made unused. Pre-existing dead code: mention it, don't touch it.
+- Every changed line should trace to the user's request. No drive-by improvements.
+
+**Anti-rationalization** — when the urge to do one of these arises, the rebuttal is the rule:
+
+| The lie | The rebuttal |
+|---|---|
+| "While I'm here, let me also fix this small adjacent thing" | Not the user's request. Note in response; don't touch. Drift is how 1-line bugfixes become 200-line PRs. |
+| "More error handling makes it more robust" | Only at boundaries (user input, external APIs). Internal validation is noise that hides real failures. |
+| "This needs a comment to explain what it does" | Fix the names instead. Comments rot; names are enforced by usage. |
+| "Let me search/read first to be safe" (when intent is clear) | Just do the task. Verification before action is a distinct request, not a default. |
+| "I should match the existing pattern" | Only if the existing pattern is correct. Match-blindly propagates mistakes. Flag, don't propagate. |
+| "Let me add a test for this small change" | Only if the user asked or the project has a test discipline I can see. Drive-by tests are scope creep. |
+
+**Learning projects (no-agent zone):** For learning-tagged ideas (#48–53 and similar in IDEAS.md), pair-write rather than generate. Explain trade-offs aloud; don't accept generated code without modifying it. These exist precisely to keep the writing-code muscle alive — agentic mode defeats their purpose.
+
+## Workflow
+**Before non-trivial tasks:** read PLAN.md first. Ask approach (skip for ops tasks). Research-heavy work goes in PLAN.md `## Research` section, not a separate file. **Also: glance at `git status` — if the repo has dirty/untracked work from a prior session, surface it and ask whether to commit before starting; don't pile a new feature onto stale uncommitted work.**
+
+**While working:**
+- Bash: separate tool calls, never chain `&&` (bypasses allow list).
+- Prefer Glob/Grep/Read over subagents when 2-3 calls suffice.
+- **Read target file and related files before any edit.** Never edit from assumptions or memory alone.
+- No sycophantic openers or closing fluff. Terse by default.
+- Recommend starting a new session when switching to an unrelated task.
+
+**Evidence as exit step:** Every implementation task ends with verifiable evidence — file path, test output, working command, or a concrete artifact. "Done" without evidence is incomplete. If the work can't be verified (e.g. UI feature, no test runner), say so explicitly rather than implying success.
+
+**Escalate when struggling — don't grind silently.** Name the obstacle in one sentence, then suggest:
+- Stronger model — if on Sonnet/Haiku/Fast, recommend switching to Opus 4.7
+- Higher effort — if a skill or session lowered effort below default high, recommend bumping back
+- Fresh session — if context is muddied or off-track
+- Warn if the task is shaping up to need 20+ tool calls.
+
+**Usage:** remind `/usage` at start of substantial sessions.
+
+## Toolchain
+- **proto** manages runtimes (Go, Python, Node, Bun, uv) — never system package manager.
+- **uv** for Python (not pip/venv). **rustup** for Rust (not proto).
 
 ## Known Gotchas
-- **SSH key for GitHub:** key is `~/.ssh/id_ed25519_gh` (not `id_ed25519`). Always use `git@github.com:` URLs, never HTTPS. Two options: (1) inline: `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_gh" git clone git@github.com:...` (2) agent: `eval $(ssh-agent -s) && ssh-add ~/.ssh/id_ed25519_gh`. Also needed for `chezmoi git -- push`.
-- **chezmoi secret detection:** blocks `chezmoi add` even with `--force` (exit 1), but the file IS added to source dir. Workaround: let it warn, then manually edit the `.tmpl` file to replace secret with `{{ .varName }}`, store value in `~/.config/chezmoi/chezmoi.toml` under `[data]`.
-- **chezmoi forget in non-TTY:** requires `--force` flag (can't open `/dev/tty` for confirmation prompt).
-- **chezmoi add on dirs with binaries:** very slow + false-positive secret warnings. Add specific files/subdirs rather than whole dirs when binaries are present.
-- **mpv on Wayland:** Without `WAYLAND_DISPLAY` set, mpv falls back to DRM (fails with "Permission denied"). Fix: `vo=dmabuf-wayland` in `~/.config/mpv/mpv.conf`.
-- **File integrity check:** `ffmpeg -v error -i file -f null - 2>&1` — no output = good file. Catches truncated downloads, HTML saved as mp4, corrupt muxes.
-- **Skills:** `~/.claude/skills/<name>/SKILL.md` — not `commands/`. Frontmatter: name, description, user-invocable, allowed-tools. Skills that call deferred tools (Bash, Edit, etc.) must include a step to load them via `ToolSearch select:<ToolName>` first — otherwise the call fails with "Invalid tool parameters".
-- **wob FIFO:** Blocks if no reader — use `timeout` wrapper. See memory/debugging.md.
-- **settings.local.json:** Edit tool fails mid-edit — always use Write tool to rewrite cleanly.
-- **Hooks — Stop event:** Fires after every response turn, not session end.
-- **Hooks — Notification:** `notification_type`: `permission_prompt` (contextual) vs `idle_prompt` (noise).
-- **History lookups:** `history.jsonl` is 9MB+ — never use Read tool on it. Always filter via `Bash python3 -c` or recap.py. Same for session JSONLs.
-- **Create file in GitHub repo:** `gh api repos/{owner}/{repo}/contents/{path} --method PUT --field message="..." --field content=""`  (content is base64; empty string = empty file)
-- **gh api large content:** `--field content=<base64>` hits OS ARG_MAX for files >~50KB. Use `--input <tmpfile>` with a JSON body file instead.
-- **GitHub repo edits:** Prefer local clone + `git mv/commit/push` over direct API manipulation. API = slow, token-heavy, fragile. Only use API when no local clone exists.
-- **Podman on Void — image names:** No unqualified search registries configured → always use fully qualified names (`docker.io/library/mongo`, `docker.io/org/image`, `ghcr.io/org/image`).
-- **Rootless Podman bind mounts:** `user: "UID:GID"` in compose maps container UID to a sub-uid on host, not the file owner. Fix: `chmod 777` on mounted dirs.
-- **podman-compose `depends_on` override:** Doesn't merge cleanly — disabled services still block startup. Use a standalone `compose.yaml` instead of override files.
-- **runit + dotenv CWD:** `godotenv.Load()` (and equivalents) resolves `.env` relative to CWD. runit does not set CWD to the project dir — add `cd /path/to/project` before `exec` in the run script.
-- **runit user services:** live in `~/service/`, not `/var/service/`. Use `SVDIR=~/service sv <cmd>` to manage them (e.g. `SVDIR=~/service sv restart rss-bot`).
-- **zstd not installed by default on Void:** needed to inspect `.tar.zst` files. Install with `sudo xbps-install zstd`.
-- **xbps-src .deb repack:** sandbox has no `tar` — use `bsdtar` in `do_extract`. Pattern: `ar x foo.deb && bsdtar -xf data.tar.gz`.
-- **Dead code in Rust:** never use `#[allow(dead_code)]` — delete the unused code instead.
-- **`cat > symlink` writes through to target:** Never write a wrapper script to a path that is currently a symlink — `cat >` follows it and corrupts the target. `rm` the symlink first, then write.
-- **Shebang escaping in bash:** `echo '#!/bin/sh'` → `#\!/bin/sh` (bash escapes `!` in history). Use `printf` or Python `open().write(chr(35)+chr(33)+'/bin/sh\n...')` instead.
-- **qwen3.5 via Ollama:** thinking mode is on by default — burns tokens/time silently. Use `qwen2.5` for summarization tasks (no thinking, good quality).
-- **summarize CLI (steipete) npm install:** global bin lands in proto node's bin dir, not on PATH. Symlink `~/.proto/tools/node/<ver>/bin/summarize` → `~/.local/bin/summarize`. No Linux binary release — npm only.
-- **`--cli claude` inside Claude Code:** blocked — nested sessions share resources and crash. Use `--model anthropic/...` with API key, or Ollama local model instead.
-
-## Usage Guardrails
-- **effortLevel default:** `"low"` in `~/.claude/settings.json` (thinking on, small budget). Use `--effort high` at session start for hard tasks.
-- **`/usage`:** CC-only slash command — no programmatic access. User must run manually.
-- **Usage reminder:** at the start of a substantial work session, gently ask user to run `/usage` if they haven't recently — helps avoid the dead zone (session hitting 100% near weekly reset).
-- **Suggest Opus when:** architecture decision with long-term consequences; same bug after 2 Sonnet attempts; complex multi-file reasoning where relationships matter.
-- **Suggest `--effort high` when:** complex algorithm design; tricky Rust lifetime/borrow issues; multi-step logical deduction where low effort visibly struggles.
-- **Warn about session burn when:** a task will require many tool calls (20+) — flag it upfront so user can batch or decide to defer.
+- **SSH key:** `~/.ssh/id_ed25519_gh`. Always `git@github.com:` URLs. Handled by `~/.ssh/config` — no `GIT_SSH_COMMAND` needed.
+- **chezmoi secret detection:** exit 1 but file IS added. Edit `.tmpl` to replace secret with `{{ .varName }}`, store in `chezmoi.toml [data]`.
+- **Skills:** `~/.claude/skills/<name>/SKILL.md`. Must `ToolSearch select:<ToolName>` before calling deferred tools.
+- **settings.local.json:** Edit tool fails mid-edit — always use Write tool.
+- **History lookups:** `history.jsonl` is 9MB+ — never Read it. Filter via `Bash python3 -c` or recap.py.
+- **runit user services:** `~/service/`, not `/var/service/`. `SVDIR=~/service sv <cmd>`.
+- **`claude -p` subprocess:** unset `CLAUDECODE` env, set `cmd.Dir=/tmp`, `--allowedTools ""` for chat mode. Add `--bare` to skip CLAUDE.md/settings discovery (up to 10x faster for non-interactive use).
+- **CC repo (anthropics/claude-code):** closed-source — only CHANGELOG.md exists, no source code. Don't search it for internals; use the binary at `~/.local/share/claude/versions/`.
+- **CC settings not in chezmoi:** `~/.claude/settings.json` — add manually after reinstall. (`statusline.sh` IS in chezmoi.)
+- **`summarize` fallbacks:** if a YouTube call returns empty, try `--youtube yt-dlp` then `--model google/gemini-2.5-pro`. Full recovery path in `~/.claude/skills/summarize/SKILL.md`. `--markdown-mode llm` is for `--extract --format md`, not the summary call.
