@@ -1,4 +1,16 @@
 #!/bin/sh
 # Switch fcitx5 input method via wofi
-choice=$(fcitx5-remote -l | wofi --dmenu --prompt "Input Method")
-[ -n "$choice" ] && fcitx5-remote -s "$choice"
+current=$(fcitx5-remote -n)
+
+choice=$(printf "keyboard-us\tunikey" | tr '\t' '\n' \
+  | sed "s/^${current}$/▸ ${current}/" \
+  | wofi --dmenu --prompt "Input Method")
+
+[ -z "$choice" ] && exit 0
+# strip marker if selected current
+choice=$(echo "$choice" | sed 's/^▸ //')
+fcitx5-remote -s "$choice"
+
+label="English"
+[ "$choice" = "unikey" ] && label="Vietnamese (Telex)"
+notify-send "Input Method" "$label" --expire-time=2000

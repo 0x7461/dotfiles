@@ -1,5 +1,5 @@
 function fish_greeting
-    set -l cow (fortune -s | cowsay)
+    set -l cow (fortune -s | iconv -c -f UTF-8 -t ASCII//TRANSLIT | cowsay)
     # find the widest line to right-align as a block
     set -l max_width 0
     for line in $cow
