@@ -1,0 +1,8 @@
+#!/bin/sh
+chosen=$(printf "Lock\nLogout\nReboot\nShutdown" | wofi -d -p "Power" -i)
+case "$chosen" in
+    Lock)     hyprlock ;;
+    Logout)   hyprctl dispatch exit ;;
+    Reboot)   loginctl reboot ;;
+    Shutdown) loginctl poweroff ;;
+esac

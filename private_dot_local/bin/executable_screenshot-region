@@ -1,0 +1,7 @@
+#!/bin/sh
+OUT="$HOME/Pictures/$(date +%Y%m%d_%Hh%Mm%Ss)_grim.png"
+region=$(slurp) || exit 0
+grim -g "$region" "$OUT" && {
+    wl-copy < "$OUT"
+    notify-send "Screenshot" "Saved to ${OUT##*/}" --expire-time=3000
+}
