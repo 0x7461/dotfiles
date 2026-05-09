@@ -26,13 +26,17 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   dirty=$(git status --porcelain | wc -l)
   [ "$age_days" -gt 3 ] && [ "$dirty" -gt 0 ] && echo "⚠ $age_days days since last commit, $dirty files dirty"
   ```
-- [ ] **Stale chezmoi state** — same shape as git, applied to the dotfiles repo. If `chezmoi status` shows pending changes AND the chezmoi source dir hasn't seen a commit in >3 days, flag. Mirrors the git rule because chezmoi-managed configs drift the same way.
+- [ ] **Stale chezmoi state** — flag if `chezmoi status` reports any drift between live files and source-of-truth. Drift means a live file has been edited (or auto-written) without `chezmoi re-add` propagating it back. Distinguish mode-only noise (umask mismatch — common, benign) from content drift (real, needs `chezmoi re-add`). Source-repo git age isn't part of this check — drift can exist on a freshly-committed source.
   ```sh
   cm_dirty=$(chezmoi status 2>/dev/null | wc -l)
-  cm_dir=$(chezmoi source-path 2>/dev/null)
-  if [ -n "$cm_dir" ] && [ -d "$cm_dir/.git" ]; then
-    cm_age=$(( ( $(date +%s) - $(git -C "$cm_dir" log -1 --format=%ct 2>/dev/null || echo $(date +%s)) ) / 86400 ))
-    [ "$cm_age" -gt 3 ] && [ "$cm_dirty" -gt 0 ] && echo "⚠ chezmoi: $cm_age days since last commit, $cm_dirty entries pending"
+  if [ "$cm_dirty" -gt 0 ]; then
+    cm_content=$(chezmoi status 2>/dev/null | while IFS= read -r ln; do
+      chezmoi diff "${ln:3}" 2>/dev/null | grep -q '^[-+][^-+]' && echo 1
+    done | wc -l)
+    cm_mode=$((cm_dirty - cm_content))
+    echo "⚠ chezmoi: $cm_dirty drifted ($cm_content content, $cm_mode mode-only)"
+    [ "$cm_content" -gt 0 ] && echo "  → run: chezmoi diff <file>; chezmoi re-add <file>"
+    [ "$cm_mode" -gt 0 ] && echo "  → mode-only noise (umask 022 vs 002); fix systemically with: chezmoi re-add --recursive ~"
   fi
   ```
 - [ ] **Sensitive untracked files** — scan for files that look secret-bearing or runtime-only and shouldn't be committed.
