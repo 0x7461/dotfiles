@@ -86,6 +86,7 @@
 ## Known Gotchas
 - **SSH key:** `~/.ssh/id_ed25519_gh`. Always `git@github.com:` URLs. Handled by `~/.ssh/config` — no `GIT_SSH_COMMAND` needed.
 - **chezmoi secret detection:** exit 1 but file IS added. Edit `.tmpl` to replace secret with `{{ .varName }}`, store in `chezmoi.toml [data]`.
+- **chezmoi mode bits:** can't represent group-writable per-file ([#769](https://github.com/twpayne/chezmoi/issues/769)); the `umask` config var (currently `0o002`) is the workaround. Mode-only drift in `chezmoi status` is usually history (older CC builds / external editors writing under umask 022); `chezmoi apply` chmods to match source. Distinguish from content drift in housekeeping.
 - **Skills:** `~/.claude/skills/<name>/SKILL.md`. Must `ToolSearch select:<ToolName>` before calling deferred tools.
 - **settings.local.json:** Edit tool fails mid-edit — always use Write tool.
 - **History lookups:** `history.jsonl` is 9MB+ — never Read it. Filter via `Bash python3 -c` or recap.py.
