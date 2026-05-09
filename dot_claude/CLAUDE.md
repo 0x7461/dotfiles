@@ -1,5 +1,5 @@
 # Global Preferences
-<!-- Last updated: 2026-05-06 -->
+<!-- Last updated: 2026-05-09 -->
 
 ## System
 - Void Linux (glibc), Hyprland, runit (not systemd). PipeWire audio. Catppuccin Macchiato theme.
@@ -14,13 +14,20 @@
 - This file: **soft limit 200 lines.** Be comprehensive on rules I've actually had to enforce — under-specified rules invite rationalization. Cut hedges, examples, and "for instance" padding ruthlessly. Quarterly trim pass.
 - MEMORY.md: disposable scratchpad, 200-line hard truncation.
 - **No `project_*.md` files in memory.** Memory is for behavior + cross-project reference only. Project-specific content goes to that project's PLAN.md.
-- **No INSIGHTS.md / research.md / notes.md files anywhere.** They drift into stale shadow-docs. Deep internals go in PLAN.md `## Internals` / `## Research` sections — same file, easier to keep current.
+- **No INSIGHTS.md / research.md / notes.md files anywhere.** They drift into stale shadow-docs. Deep internals: PLAN.md `## Internals` (narrative) or `agent_docs/<topic>.md` (imperative agent reference when AGENTS.md overflows). Per-project doc layout: see `## Documentation`.
 
 ## Documentation
 - `~/projects/IDEAS.md` — project index (slim entries only)
-- `~/projects/<proj>/PLAN.md` — **only per-project doc.** Plans, decisions, build notes, deep internals. Use `## Internals` / `## Research` sections (see Critical Rules: no separate INSIGHTS.md/research.md). Include `Updated: YYYY-MM-DD`. Soft limit ~300 lines.
+- **Per-project doc tiers** (canonical spec: `~/projects/agent-docs/PLAN.md`):
+  - `AGENTS.md` — agent-imperative. Setup, commands, layout, Boundaries (Always/Never/Ask first/Untested), workflows. Aim <150 lines, hard <300. Cross-tool standard.
+  - `CLAUDE.md` — one-line `@AGENTS.md` shim. Always create alongside AGENTS.md.
+  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research, History. `Updated: YYYY-MM-DD` header. Soft limit ~300 lines, trim-on-done.
+  - `README.md` — optional end-user docs. Skip for personal-use tools.
+  - `agent_docs/<topic>.md` — only when imperative content overflows AGENTS.md.
 - `~/obsidian-vault/system/*.md` — system knowledge | `dev/*.md` — dev knowledge
 - `~/.claude/housekeeping-checklist.md` — trigger-based doc hygiene checklist
+
+**Drift rule:** PLAN canonical for narrative/scope; AGENTS canonical for imperative rules. On overlap (same content needed in both): narrative wins, imperative becomes one-line pointer.
 
 **On project resume:** skim PLAN.md, flag stale items.
 **After tasks:** `/housekeeping` saves learnings + checks consistency.

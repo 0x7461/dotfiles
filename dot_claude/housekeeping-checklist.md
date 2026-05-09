@@ -3,16 +3,17 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-05-08
+**Last reviewed:** 2026-05-09
 **Last CC cleanup:** 2026-04-24
 
 ---
 
 ## After code changes to a project
 
-- [ ] PLAN.md updated (new decisions, build notes, gotchas)
+- [ ] PLAN.md updated (new decisions, internals, history)
+- [ ] **AGENTS.md updated** if rules / commands / layout / boundaries / external-integration points changed
+- [ ] `Updated: YYYY-MM-DD` refreshed on touched docs (PLAN.md and AGENTS.md)
 - [ ] IDEAS.md status still accurate (Idea/Research/Implement/Maintain/Archived)
-- [ ] `Updated: YYYY-MM-DD` date in PLAN.md header
 - [ ] **Trim-on-done:** any roadmap item just shipped? Collapse its detail block into a one-line History entry. Don't let ✅-done blocks accumulate.
 
 ## Git hygiene (after code changes in a git repo)
@@ -24,6 +25,15 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   age_days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
   dirty=$(git status --porcelain | wc -l)
   [ "$age_days" -gt 3 ] && [ "$dirty" -gt 0 ] && echo "⚠ $age_days days since last commit, $dirty files dirty"
+  ```
+- [ ] **Stale chezmoi state** — same shape as git, applied to the dotfiles repo. If `chezmoi status` shows pending changes AND the chezmoi source dir hasn't seen a commit in >3 days, flag. Mirrors the git rule because chezmoi-managed configs drift the same way.
+  ```sh
+  cm_dirty=$(chezmoi status 2>/dev/null | wc -l)
+  cm_dir=$(chezmoi source-path 2>/dev/null)
+  if [ -n "$cm_dir" ] && [ -d "$cm_dir/.git" ]; then
+    cm_age=$(( ( $(date +%s) - $(git -C "$cm_dir" log -1 --format=%ct 2>/dev/null || echo $(date +%s)) ) / 86400 ))
+    [ "$cm_age" -gt 3 ] && [ "$cm_dirty" -gt 0 ] && echo "⚠ chezmoi: $cm_age days since last commit, $cm_dirty entries pending"
+  fi
   ```
 - [ ] **Sensitive untracked files** — scan for files that look secret-bearing or runtime-only and shouldn't be committed.
   ```sh
@@ -87,6 +97,9 @@ Only runs if `/run/media/ta/T7 Shield/` is mounted. Skip silently if not.
   - `find ~/projects -name "INSIGHTS.md" -o -name "research.md" -o -name "notes.md"` — flag any; these should be folded into PLAN.md
   - `find ~/.claude/projects -name "project_*.md"` — flag any; project content belongs in PLAN.md
   - `wc -l ~/projects/*/PLAN.md | awk '$1 > 300'` — flag PLAN.md files over the 300-line soft limit
+  - `wc -l ~/projects/*/AGENTS.md 2>/dev/null | awk '$1 > 300'` — flag AGENTS.md files over the 300-line hard limit (split to `agent_docs/` if hit)
+  - For each project with AGENTS.md, check `CLAUDE.md` exists alongside as `@AGENTS.md` shim — flag missing
+  - For each project with code (src/, *.go, *.py, *.rs, etc.) and PLAN.md but no AGENTS.md — flag rollout candidate (per agent-docs convention)
   - For each PLAN.md, compare its `**Status:**` line against the matching IDEAS.md entry — flag mismatches
 - [ ] **Repo staleness sweep** — for each project repo, check git age + dirtiness:
   ```sh
