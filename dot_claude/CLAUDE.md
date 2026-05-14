@@ -56,6 +56,7 @@
 | "Let me search/read first to be safe" (when intent is clear) | Just do the task. Verification before action is a distinct request, not a default. |
 | "I should match the existing pattern" | Only if the existing pattern is correct. Match-blindly propagates mistakes. Flag, don't propagate. |
 | "Let me add a test for this small change" | Only if the user asked or the project has a test discipline I can see. Drive-by tests are scope creep. |
+| "I'll rewrite this section from memory" | Read the source, copy verbatim via shell or Edit tool, then make only the targeted change. Self-review the diff for unauthorized mutations before confirming; escalate only if uncertain. |
 
 **Learning projects (no-agent zone):** For learning-tagged ideas (#48–53 and similar in IDEAS.md), pair-write rather than generate. Explain trade-offs aloud; don't accept generated code without modifying it. These exist precisely to keep the writing-code muscle alive — agentic mode defeats their purpose.
 
@@ -79,6 +80,14 @@
 
 **Usage:** remind `/usage` at start of substantial sessions.
 
+## Output Format
+
+**Use HTML when** the output is a terminal artifact — read once, shared, or interacted with (reports, dashboards, design explorations, PR explainers, throwaway editors with export buttons). HTML unlocks SVG, color, tables, interactions that Markdown can't express.
+
+**Use Markdown when** the file lives in context long-term, gets re-edited, or is version-controlled (PLAN.md, AGENTS.md, SKILL.md, log files). HTML diffs are noisy and each re-edit pass compounds document corruption.
+
+**The test:** "Will this be re-edited?" → Markdown. "Will this be read or used once?" → HTML.
+
 ## Toolchain
 - **proto** manages runtimes (Go, Python, Node, Bun, uv) — never system package manager.
 - **uv** for Python (not pip/venv). **rustup** for Rust (not proto).
@@ -87,11 +96,11 @@
 - **SSH key:** `~/.ssh/id_ed25519_gh`. Always `git@github.com:` URLs. Handled by `~/.ssh/config` — no `GIT_SSH_COMMAND` needed.
 - **chezmoi secret detection:** exit 1 but file IS added. Edit `.tmpl` to replace secret with `{{ .varName }}`, store in `chezmoi.toml [data]`.
 - **chezmoi mode bits:** can't represent group-writable per-file ([#769](https://github.com/twpayne/chezmoi/issues/769)); the `umask` config var (currently `0o002`) is the workaround. Mode-only drift in `chezmoi status` is usually history (older CC builds / external editors writing under umask 022); `chezmoi apply` chmods to match source. Distinguish from content drift in housekeeping.
-- **Skills:** `~/.claude/skills/<name>/SKILL.md`. Must `ToolSearch select:<ToolName>` before calling deferred tools.
+- **Skills:** `~/.claude/skills/<name>/SKILL.md`. Must `ToolSearch select:<ToolName>` before calling deferred tools. Aim ≤100 lines; split overflow to `REFERENCE.md` / topic files. Skill `description` format: "What it does. Use when [triggers]."
 - **settings.local.json:** Edit tool fails mid-edit — always use Write tool.
 - **History lookups:** `history.jsonl` is 9MB+ — never Read it. Filter via `Bash python3 -c` or recap.py.
 - **runit user services:** `~/service/`, not `/var/service/`. `SVDIR=~/service sv <cmd>`.
 - **`claude -p` subprocess:** unset `CLAUDECODE` env, set `cmd.Dir=/tmp`, `--allowedTools ""` for chat mode. Add `--bare` to skip CLAUDE.md/settings discovery (up to 10x faster for non-interactive use).
 - **CC repo (anthropics/claude-code):** closed-source — only CHANGELOG.md exists, no source code. Don't search it for internals; use the binary at `~/.local/share/claude/versions/`.
 - **CC settings not in chezmoi:** `~/.claude/settings.json` — add manually after reinstall. (`statusline.sh` IS in chezmoi.)
-- **`summarize` fallbacks:** if a YouTube call returns empty, try `--youtube yt-dlp` then `--model google/gemini-2.5-pro`. Full recovery path in `~/.claude/skills/summarize/SKILL.md`. `--markdown-mode llm` is for `--extract --format md`, not the summary call.
+- **`summarize` fallbacks:** if a YouTube call returns empty, try `--youtube yt-dlp` then bump `--model sonnet` or `flash`. Gemini 2.5 Pro is broken (empty output); skip it. Full recovery path in `~/.claude/skills/summarize/SKILL.md`. `--markdown-mode llm` is for `--extract --format md`, not the summary call.
