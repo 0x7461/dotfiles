@@ -13,13 +13,14 @@ if status is-interactive
 	if set -q SSH_CONNECTION; and not set -q TMUX
 		tmux attach -t main 2>/dev/null; or tmux new -s main
 	end
-end
 
-# Auto-start Hyprland on TTY1 login (with D-Bus session)
-if status is-login
-    if test -z "$WAYLAND_DISPLAY"; and test "$XDG_VTNR" = "1"
-        exec dbus-run-session -- Hyprland
-    end
+	function hl
+		exec dbus-run-session -- Hyprland
+	end
+
+	function ni
+		exec dbus-run-session -- niri --session
+	end
 end
 
 # proto
