@@ -25,23 +25,13 @@ done
 
 ## 2. Archiver Status
 
-Recent sync activity:
+Defer to archiver's own status command (canonical, single source of truth):
 
 ```sh
-# Last sync entries per service
-for log in ~/service/archiver/log/main/current ~/service/archiver-stories/log/main/current; do
-  [ -f "$log" ] && echo "=== $(basename $(dirname $(dirname $(dirname "$log")))) ===" && grep -E "(Syncing|Done:|Saved:|Failed:|No active)" "$log" | tail -10
-done
+uv run --project ~/projects/archiver archiver status
 ```
 
-Tracked accounts and download counts:
-
-```sh
-sqlite3 ~/projects/archiver/archiver.db "SELECT platform, COUNT(*) as total FROM downloads GROUP BY platform;"
-sqlite3 ~/projects/archiver/archiver.db "SELECT platform, author, download_date FROM downloads ORDER BY download_date DESC LIMIT 5;"
-```
-
-Recent download failures (last 7 days):
+Plus failures in the last 7 days (status doesn't surface these):
 
 ```sh
 sqlite3 ~/projects/archiver/archiver.db "SELECT failed_at, platform, author, error FROM download_failures WHERE failed_at >= datetime('now', '-7 days') ORDER BY failed_at DESC LIMIT 10;"
@@ -62,22 +52,30 @@ done
 
 ## 4. Project Tasks
 
-Scan PLAN.md files for open items:
+Scan PLAN.md files for open items in either format:
 
 ```sh
 for plan in ~/projects/*/PLAN.md; do
   project=$(basename $(dirname "$plan"))
-  open=$(grep -c '^\- \[ \]' "$plan" 2>/dev/null || true)
-  [ "$open" -gt 0 ] && echo "$project: $open open task(s)" || true
+  checkboxes=$(grep -c '^- \[ \]' "$plan" 2>/dev/null || echo 0)
+  has_backlog=$(awk '/^## Backlog/{flag=1; next} /^## /{flag=0} flag && /^- /' "$plan" 2>/dev/null | wc -l)
+  total=$((checkboxes + has_backlog))
+  [ "$total" -gt 0 ] && echo "$project: $total open ($checkboxes checkboxes, $has_backlog backlog items)" || true
 done
 ```
+
+Most projects use the agent-docs `## Backlog` convention; older projects use `- [ ]` checkboxes. The scan covers both.
 
 ## Presentation
 
 Summarize as a compact dashboard:
 - Services: running/down
-- Archiver: last sync time, recent failures (flag if any in last 7 days), new downloads
+- Archiver: status output + failure count
 - Packages: any outdated
 - Tasks: open items per project
 
 Flag anything that needs attention.
+
+## 5. Verify
+
+Re-read the assembled dashboard with one question: *"if the user only sees this summary, will they know whether anything needs immediate action?"* If not, add an explicit "**Action needed:** ..." line at the top. If everything is green, say "**All clear**" — silence reads as "skipped."

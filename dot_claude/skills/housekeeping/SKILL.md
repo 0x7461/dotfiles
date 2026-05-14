@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: End-of-session doc hygiene — save learnings, check consistency, flag stale docs. Merges save-learnings + consistency checking.
+description: End-of-session doc hygiene — review the session, save non-obvious findings, run trigger-based checks. Use when the user says /housekeeping, "save learnings", or "wrap up the session".
 user-invocable: true
 allowed-tools:
   - Read
@@ -11,70 +11,48 @@ allowed-tools:
   - Bash
 ---
 
-Review the session, save findings, and verify doc/config/service consistency. Replaces `/save-learnings`.
+Review the session, save findings, and verify doc/config/service consistency.
 
 ## Steps
 
-### 1. Load required tools
+### 1. Load tools and checklist
 
-Call `ToolSearch` with query `select:Bash,Edit,Write,Glob,Grep,Read` to load deferred tools.
+`ToolSearch` query `select:Bash,Edit,Write,Glob,Grep,Read`, then read `~/.claude/housekeeping-checklist.md`.
 
-### 2. Read the checklist
+**Gate:** do not proceed to step 2 until the checklist is in context — its trigger sections drive step 4.
 
-Read `~/.claude/housekeeping-checklist.md` for the current trigger-based checks.
+### 2. Detect what changed this session
 
-### 3. Detect what changed this session
+Scan the conversation for: projects touched (code/config/discussion), system configs changed, services modified, errors+resolutions, surprising or non-obvious decisions.
 
-Scan the conversation for:
-- Which projects were touched (code, config, or discussion)
-- Whether system configs changed (hyprland, fish, mpv, etc.)
-- Whether services were modified (runit run scripts, .env files)
-- Errors encountered and how they were resolved
-- Surprising behavior or non-obvious decisions
+**Gate:** if nothing non-obvious happened, skip steps 3–4 and report "Nothing worth saving" in step 5. Don't manufacture findings.
 
-### 4. Save learnings (from save-learnings)
+### 3. Save learnings
 
-For each non-obvious finding, route it:
+For each non-obvious finding, route to the right home. **Before writing to a project's `PLAN.md` or `AGENTS.md`, skim the existing file** — match the existing section structure, terminology, and `## History` format rather than inventing a new shape.
+
+Procedural format, mark `⚠ untested` when applicable, refresh `Updated:` dates:
 
 | What | Where |
 |------|-------|
 | Build/tool behavior, error+fix, arch decision | `~/projects/<proj>/PLAN.md` |
-| Deep reverse-engineering or API internals | `~/projects/<proj>/PLAN.md` `## Internals` section (no separate INSIGHTS.md — see CLAUDE.md) |
-| System knowledge (audio, hyprland, packages) | `~/obsidian-vault/system/<topic>.md` |
-| Dev knowledge (patterns, algorithms, frameworks) | `~/obsidian-vault/dev/<topic>.md` |
-| Project status changed | `~/projects/IDEAS.md` (index entry only — keep it slim) |
+| Deep reverse-engineering or API internals | `~/projects/<proj>/PLAN.md ## Internals` |
+| Imperative agent rules | `~/projects/<proj>/AGENTS.md` |
+| System knowledge | `~/obsidian-vault/system/<topic>.md` |
+| Dev knowledge | `~/obsidian-vault/dev/<topic>.md` |
+| Project status changed | `~/projects/IDEAS.md` (slim entry — link to PLAN.md) |
 | Cross-project rule or gotcha | `~/.claude/CLAUDE.md` |
 
-**Threshold:** only save if genuinely non-obvious and would save time in a future session. Skip if already documented or session-specific.
+**Threshold:** only save if non-obvious AND would save time in a future session. Skip if derivable from `git log`, already in CLAUDE.md/PLAN.md, or session-specific.
 
-**Format:** procedural steps over descriptions. Mark untested: `⚠ untested`. Add/update `Updated: YYYY-MM-DD` at the bottom of modified docs.
+### 4. Run matching checklist sections
 
-### 5. Run relevant checklist sections
+Run only the sections in `housekeeping-checklist.md` whose triggers fired this session (code-changes / config-changes / service-changes / T7-mounted / always). The checklist is canonical; do not duplicate its commands here.
 
-Based on what changed, run the matching sections from the checklist:
+**Gate:** if a check surfaces drift you can fix safely (stale `Updated:` dates, missing `@AGENTS.md` shim, mode-only chezmoi noise), fix it inline rather than just reporting. See [feedback memory](../../projects/-home-ta/memory/feedback_fix_stale_items.md).
 
-**If code changed in a project:**
-- Check PLAN.md has an `Updated:` date within the last 7 days
-- Check IDEAS.md status is still accurate
+### 5. Report
 
-**If config files changed:**
-- Run `chezmoi status 2>&1 | head -20` to detect unmanaged drift
-- Check if the relevant obsidian-vault/system/ note exists and is current
-
-**If services were touched:**
-- Run `SVDIR=~/service sv status` on affected services
-- Check log dirs exist
-
-**If T7 Shield is mounted** (`/run/media/ta/T7 Shield/` exists):
-- Run the "T7 vault inbox sweep" section from the checklist — surface stale items in `_inbox/unsorted/` (>90 days), interrupted imports in `_inbox/imports/` (>30 days), and pending cleanup backups in `_meta/` (>14 days). Don't auto-delete; report.
-
-**Always (session end):**
-- Check MEMORY.md line count (`wc -l`)
-- Check if checklist itself needs review (>30 days since `Last reviewed:` date)
-
-### 6. Report
-
-Output a concise summary:
 ```
 ## Housekeeping Report
 
@@ -82,28 +60,16 @@ Output a concise summary:
 - <what was saved and where, or "Nothing worth saving">
 
 ### Checked
-- <what was verified, any issues found>
+- <what was verified; issues found and resolved>
 
 ### Stale / Action needed
-- <anything that needs attention, or "All clear">
+- <anything that needs user attention, or "All clear">
 ```
 
-### 7. Self-revision check
+### 6. Self-revision
 
-If the checklist's `Last reviewed:` date is >30 days old, append:
-```
-### Checklist review due
-The housekeeping checklist hasn't been reviewed in >30 days. Run `/housekeeping` with `--review-checklist` to update it.
-```
-
-## What NOT to save
-
-- Code patterns derivable from reading current source
-- Git history (use `git log` / `git blame`)
-- Debugging solutions (the fix is in the code, commit message has context)
-- Anything already in CLAUDE.md or PLAN.md
-- Ephemeral task details or current conversation context
+If `housekeeping-checklist.md` `Last reviewed:` is >30 days old, append a "Checklist review due" line at the end of the report.
 
 ## Token budget
 
-This skill should complete in <15 tool calls. If nothing interesting happened, say so in 2 lines and stop. Don't manufacture findings.
+Should complete in <15 tool calls. Two-line response is a valid outcome when nothing happened.

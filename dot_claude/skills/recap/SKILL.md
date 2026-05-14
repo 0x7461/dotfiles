@@ -32,7 +32,22 @@ Where `$DAYS` is the argument passed by the user (default: 3), and `$SESSION_ID`
 
 Show the output as-is — it's already formatted.
 
-### 4. Offer to dig deeper
+### 4. Verify against project state
+
+For each project that appears in the recap with file edits in the recap window, check whether that project has uncommitted work:
+
+```sh
+for proj in <projects-from-recap>; do
+  d=~/projects/$proj
+  [ -d "$d/.git" ] || continue
+  dirty=$(git -C "$d" status --porcelain 2>/dev/null | wc -l)
+  [ "$dirty" -gt 0 ] && echo "⚠ $proj: $dirty uncommitted file(s) — work from this session may not be persisted"
+done
+```
+
+If any flag fires, surface it under the recap as "**Heads up:** N project(s) from this window still have uncommitted changes." Don't auto-commit; the user decides.
+
+### 5. Offer to dig deeper
 
 After showing the summary, ask if the user wants to:
 - Use `--session <id>` to read the full conversation of a specific session
