@@ -56,7 +56,7 @@
 | "Let me search/read first to be safe" (when intent is clear) | Just do the task. Verification before action is a distinct request, not a default. |
 | "I should match the existing pattern" | Only if the existing pattern is correct. Match-blindly propagates mistakes. Flag, don't propagate. |
 | "Let me add a test for this small change" | Only if the user asked or the project has a test discipline I can see. Drive-by tests are scope creep. |
-| "I'll rewrite this section from memory" | Read the source, copy verbatim via shell or Edit tool, then make only the targeted change. Self-review the diff for unauthorized mutations before confirming; escalate only if uncertain. |
+| "I'll rewrite this section from memory" | Read the source first (don't reconstruct). Default to Edit for targeted changes; reach for a Bash script only when the mutation is mechanical across many files or the script is itself the clearest spec. Self-review the diff before confirming. |
 
 **Learning projects (no-agent zone):** For learning-tagged ideas (#48–53 and similar in IDEAS.md), pair-write rather than generate. Explain trade-offs aloud; don't accept generated code without modifying it. These exist precisely to keep the writing-code muscle alive — agentic mode defeats their purpose.
 
