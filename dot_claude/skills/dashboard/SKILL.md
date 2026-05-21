@@ -1,6 +1,6 @@
 ---
 name: dashboard
-description: System dashboard — services, archiver status, packages, and project tasks. Use ONLY when the user explicitly asks about system status, running services, or "what needs attention". Do NOT trigger for questions about what to work on next or project ideas — those should read IDEAS.md directly.
+description: System dashboard — services, archiver status, packages, project tasks, and IDEAS.md open projects. Use when the user explicitly asks about system status, running services, "what needs attention", or wants a sweep of open items across all projects (not just PLAN.md backlogs). Do NOT trigger for vague "what should I work on" — surface options from IDEAS.md directly instead.
 disable-model-invocation: false
 user-invocable: true
 allowed-tools:
@@ -65,6 +65,37 @@ done
 ```
 
 Most projects use the agent-docs `## Backlog` convention; older projects use `- [ ]` checkboxes. The scan covers both.
+
+## 5. IDEAS.md Open Projects
+
+PLAN.md scan in §4 only catches projects with an active backlog. Many open projects live in IDEAS.md at earlier statuses (Implement / Research / Idea — PLAN.md written) without a backlog block. Scan IDEAS.md and surface them:
+
+```sh
+awk '
+/^## [0-9]+\./ { num=$0; sub(/^## /, "", num); sub(/\..*$/, "", num); title=$0; sub(/^## [0-9]+\. */, "", title); next }
+/^\*\*Status:\*\*/ {
+  s=$0; sub(/^\*\*Status:\*\*[ ]*/, "", s); sub(/ *\|.*$/, "", s)
+  bucket=""
+  if (s ~ /^Implement/)                    bucket="Implement"
+  else if (s ~ /^Research/)                bucket="Research"
+  else if (s ~ /^Idea.*PLAN\.md written/)  bucket="Idea (PLAN drafted)"
+  if (bucket != "") printf "  #%s  %-22s  %s\n", num, bucket, title
+}' ~/projects/IDEAS.md
+```
+
+Reports each non-Maintain/Done/Archived entry. Sort or group by bucket in presentation. Exclusions are deliberate:
+- **Maintain** — already shipped, not "open work."
+- **Done / Archived** — closed.
+- **Idea (no PLAN.md)** — too many; would flood output. Surface count only.
+
+Also count the Idea-no-PLAN bucket for visibility:
+
+```sh
+awk '
+/^\*\*Status:\*\*[ ]*Idea/ && $0 !~ /PLAN\.md written/ { c++ }
+END { print "  Idea (no PLAN): " c " entries — see IDEAS.md if browsing" }
+' ~/projects/IDEAS.md
+```
 
 ## Presentation
 
