@@ -99,7 +99,7 @@
 - **Skills:** `~/.claude/skills/<name>/SKILL.md`. Must `ToolSearch select:<ToolName>` before calling deferred tools. Aim ≤100 lines; split overflow to `REFERENCE.md` / topic files. Skill `description` format: "What it does. Use when [triggers]."
 - **settings.local.json:** Edit tool fails mid-edit — always use Write tool.
 - **History lookups:** `history.jsonl` is 9MB+ — never Read it. Filter via `Bash python3 -c` or recap.py.
-- **runit user services:** `~/service/`, not `/var/service/`. `SVDIR=~/service sv <cmd>`.
+- **runit user services:** `~/service/`, not `/var/service/`. `SVDIR=~/service sv <cmd>`. Creating a service dir = runsv discovers it and starts immediately; the `down` sentinel file only blocks auto-start at *next boot*, not first discovery. To stage without running: create files, then `sv down <name>`.
 - **`claude -p` subprocess:** unset `CLAUDECODE` env, set `cmd.Dir=/tmp`, `--allowedTools ""` for chat mode. Add `--bare` to skip CLAUDE.md/settings discovery (up to 10x faster for non-interactive use).
 - **CC repo (anthropics/claude-code):** closed-source — only CHANGELOG.md exists, no source code. Don't search it for internals; use the binary at `~/.local/share/claude/versions/`.
 - **CC settings not in chezmoi:** `~/.claude/settings.json` — add manually after reinstall. (`statusline.sh` IS in chezmoi.)
