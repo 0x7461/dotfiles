@@ -1,0 +1,4 @@
+#!/bin/sh
+exec 2>&1
+while ! [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0" ]; do sleep 0.2; done
+exec pipewire-pulse

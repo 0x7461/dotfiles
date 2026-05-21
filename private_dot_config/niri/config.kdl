@@ -1,0 +1,189 @@
+// niri config — first-pass port from ~/.config/hypr/.
+// Status: DRAFT. Not yet flipped as default; launched from spare TTY only.
+// Hyprland config remains canonical until Phase 6.
+
+// Reference: https://github.com/niri-wm/niri/wiki/Configuration
+
+input {
+    keyboard {
+        xkb {
+            layout "us"
+            options "ctrl:nocaps"
+        }
+    }
+    touchpad {
+        tap
+        dwt              // disable-while-typing
+        // natural-scroll intentionally omitted (= disabled). It's a boolean toggle in niri, not a key=value.
+        // drag-lock not yet exposed as a niri option — revisit when upstream lands it
+    }
+    mouse {}
+    focus-follows-mouse max-scroll-amount="0%"
+}
+
+// Monitors — laptop + external TV.
+// External TV: 1366x768 native, no overscan. Positioned to the right.
+output "DP-1" {
+    mode "1366x768@59.79"
+    position x=1728 y=0
+    scale 1.0
+}
+
+environment {
+    XCURSOR_THEME "Adwaita"
+    XCURSOR_SIZE "20"
+
+    // NVIDIA Wayland
+    GBM_BACKEND "nvidia-drm"
+    __GLX_VENDOR_LIBRARY_NAME "nvidia"
+    WLR_NO_HARDWARE_CURSORS "1"
+
+    // fcitx5 input method (GTK_IM_MODULE intentionally unset — Wayland IM frontend)
+    QT_IM_MODULE "fcitx"
+    XMODIFIERS "@im=fcitx"
+
+    // HYPRCURSOR_* intentionally dropped — niri uses XCURSOR_*.
+}
+
+layout {
+    gaps 10
+    center-focused-column "never"
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+    default-column-width { proportion 0.5; }
+
+    focus-ring {
+        width 2
+        active-color "#33ccff"
+        inactive-color "#595959"
+    }
+
+    border {
+        off
+    }
+}
+
+prefer-no-csd
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// Autostart — mirror of ~/.config/hypr/hyprland.d/autostarts.conf.
+spawn-at-startup "swaybg" "-i" "/home/ta/.wallpapers/face.png"
+// PipeWire/wireplumber/pipewire-pulse are now supervised by runit (~/service/),
+// independent of compositor lifetime. start-sound.sh removed from autostart.
+spawn-at-startup "/usr/libexec/polkit-gnome-authentication-agent-1"
+spawn-at-startup "mako"
+spawn-at-startup "runsvdir" "/home/ta/service"
+spawn-at-startup "fcitx5" "-d"
+spawn-at-startup "udiskie" "--tray"
+
+// wob FIFOs — sh -c needed for the redirect/pipe chain.
+spawn-at-startup "sh" "-c" "rm -f $XDG_RUNTIME_DIR/wob-vol.sock && mkfifo $XDG_RUNTIME_DIR/wob-vol.sock && tail -f $XDG_RUNTIME_DIR/wob-vol.sock | wob -c ~/.config/wob/volume.ini"
+spawn-at-startup "sh" "-c" "rm -f $XDG_RUNTIME_DIR/wob-br.sock && mkfifo $XDG_RUNTIME_DIR/wob-br.sock && tail -f $XDG_RUNTIME_DIR/wob-br.sock | wob -c ~/.config/wob/brightness.ini"
+
+// eww bar retired 2026-05-21 — config archived to ~/obsidian-vault/system/configs/eww/.
+// Replaced with on-demand notifications (clock/weather binds).
+
+// swayidle replaces hypridle. Timings + invocation live in the launcher script;
+// keeping them out of KDL avoids brittle multi-line spawn-at-startup argv
+// (which silently swallowed the previous draft and never spawned swayidle).
+spawn-at-startup "/home/ta/.local/bin/niri-swayidle.sh"
+
+// Keybinds — port of ~/.config/hypr/hyprland.d/keybinds.conf.
+binds {
+    Mod+C       { close-window; }
+    Mod+Shift+C { spawn "quick-capture"; }
+    Mod+V       { toggle-window-floating; }
+    Mod+Return  { spawn "ghostty"; }
+    Mod+Shift+Return { spawn "alacritty"; }
+    Mod+O       { spawn "sh" "-c" "pkill wofi || wofi --show drun"; }  // wofi hardcoded to `top` layer; fullscreen covers it — exit fullscreen first
+    Mod+Shift+Q { spawn "power-menu-niri"; }
+    Mod+Shift+E { quit skip-confirmation=true; }  // direct-exit fallback if wofi/power-menu misbehaves
+    Mod+Shift+F { fullscreen-window; }              // toggle fullscreen (escape route — wofi can't draw over fullscreen)
+    Mod+L       { spawn "hyprlock"; }  // hyprlock works on niri via ext-session-lock-v1
+
+    Mod+Left    { focus-column-left; }
+    Mod+Right   { focus-column-right; }
+    Mod+Up      { focus-window-up; }
+    Mod+Down    { focus-window-down; }
+
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+0 { focus-workspace 10; }
+
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+    Mod+Shift+6 { move-column-to-workspace 6; }
+    Mod+Shift+7 { move-column-to-workspace 7; }
+    Mod+Shift+8 { move-column-to-workspace 8; }
+    Mod+Shift+9 { move-column-to-workspace 9; }
+    Mod+Shift+0 { move-column-to-workspace 10; }
+
+    // Mod+S / Mod+Shift+S — Hyprland scratchpad has no niri equivalent.
+    // Park unbound; revisit with a floating-window toggle script if missed.
+
+    // Multimedia keys — same wpctl/brightnessctl/wob commands as Hyprland.
+    XF86AudioRaiseVolume allow-when-locked=true { spawn "sh" "-c" "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+; timeout 0.1 bash -c 'wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk \"{printf \\\"%d\\\\n\\\", \\$2*100}\" > $XDG_RUNTIME_DIR/wob-vol.sock'"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn "sh" "-c" "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-; timeout 0.1 bash -c 'wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk \"{printf \\\"%d\\\\n\\\", \\$2*100}\" > $XDG_RUNTIME_DIR/wob-vol.sock'"; }
+    XF86AudioMute        allow-when-locked=true { spawn "sh" "-c" "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle; timeout 0.1 bash -c 'wpctl get-volume @DEFAULT_AUDIO_SINK@ | grep -q MUTED && echo 0 > $XDG_RUNTIME_DIR/wob-vol.sock || wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk \"{printf \\\"%d\\\\n\\\", \\$2*100}\" > $XDG_RUNTIME_DIR/wob-vol.sock'"; }
+    XF86AudioMicMute     allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"; }
+    XF86MonBrightnessUp  allow-when-locked=true { spawn "sh" "-c" "brightnessctl s 10%+; timeout 0.1 bash -c 'brightnessctl -m | awk -F, \"{print substr(\\$4, 0, length(\\$4)-1)}\" > $XDG_RUNTIME_DIR/wob-br.sock'"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "sh" "-c" "brightnessctl s 10%-; timeout 0.1 bash -c 'brightnessctl -m | awk -F, \"{print substr(\\$4, 0, length(\\$4)-1)}\" > $XDG_RUNTIME_DIR/wob-br.sock'"; }
+
+    XF86AudioNext  allow-when-locked=true { spawn "playerctl" "next"; }
+    XF86AudioPause allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioPlay  allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioPrev  allow-when-locked=true { spawn "playerctl" "previous"; }
+
+    Print       { spawn "screenshot-region"; }
+    Mod+Print   { spawn "screenshot-menu-niri"; }
+
+    Mod+I       { spawn "fcitx5-switch"; }
+    Mod+F       { spawn "ghostty" "-e" "yazi"; }
+}
+
+// Window rules — port of ~/.config/hypr/hyprland.d/windows-and-workspaces.conf.
+// niri has no "maximize" concept → no suppressevent rule needed.
+// "no gaps when only" (`w[tv1]`/`f[1]`) has no conditional-gaps equivalent
+// in niri — accepted regression, gaps stay uniform.
+
+window-rule {
+    match app-id="org.pulseaudio.pavucontrol"
+    open-floating true
+}
+window-rule {
+    match app-id="blueman-manager"
+    open-floating true
+}
+window-rule {
+    match app-id=r#"^(Firefox|firefox)$"# title="^Library$"
+    open-floating true
+}
+window-rule {
+    match app-id=r#"^(Firefox|firefox)$"# title="^Extension:"
+    open-floating true
+}
+
+// Idle inhibit for fullscreen video: handled by mpv/Firefox via the
+// idle-inhibit-v1 protocol — no niri-side rule needed.
+// niri's `block-out-from` controls screencast privacy, not idle, so the
+// previous draft rule was a wrong analogue and has been removed.
+// If idle still triggers during fullscreen video, install sway-audio-idle-inhibit
+// as a fallback (in xbps repos).
