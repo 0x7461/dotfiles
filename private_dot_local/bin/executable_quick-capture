@@ -1,5 +1,5 @@
 #!/bin/sh
-text=$(echo "" | wofi --dmenu --prompt "Capture (expense / idea / todo / note)" --lines 1 --width 600)
+text=$(: | fuzzel --dmenu --prompt "Capture (expense / idea / todo / note) " --lines 0)
 [ -z "$text" ] && exit 0
 
 JSON_BODY=$(printf '%s' "$text" | python3 -c 'import json,sys; print(json.dumps({"text": sys.stdin.read()}))')

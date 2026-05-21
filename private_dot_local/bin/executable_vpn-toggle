@@ -1,0 +1,11 @@
+#!/bin/sh
+# Toggle ProtonVPN WireGuard connection via fuzzel
+IFACE="void-US-FREE-77"
+
+if ip link show "$IFACE" >/dev/null 2>&1; then
+    choice=$(printf "Disconnect\nCancel" | fuzzel --dmenu --prompt "VPN: Connected  ")
+    [ "$choice" = "Disconnect" ] && sudo wg-quick down "$IFACE"
+else
+    choice=$(printf "Connect\nCancel" | fuzzel --dmenu --prompt "VPN: Disconnected  ")
+    [ "$choice" = "Connect" ] && sudo wg-quick up "$IFACE"
+fi

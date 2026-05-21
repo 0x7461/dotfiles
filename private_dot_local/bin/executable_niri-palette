@@ -1,0 +1,43 @@
+#!/bin/sh
+# Niri command palette via fuzzel.
+#
+# Each line: "<human label> | <niri msg action args>"
+# Selected line's action is passed to `niri msg action` via sh -c so quoted
+# args (e.g. set-column-width "100%") get word-split correctly.
+#
+# Bound to Mod+Semicolon in ~/.config/niri/config.kdl.
+
+choice=$(printf '%s\n' \
+  "Overview                       | toggle-overview" \
+  "Fullscreen window              | fullscreen-window" \
+  "Maximize column                | maximize-column" \
+  "Center column                  | center-column" \
+  "Cycle preset column width      | switch-preset-column-width" \
+  "Column width 100%              | set-column-width '100%'" \
+  "Column width 66%               | set-column-width '66%'" \
+  "Column width 50%               | set-column-width '50%'" \
+  "Column width 33%               | set-column-width '33%'" \
+  "Column width +10%              | set-column-width '+10%'" \
+  "Column width -10%              | set-column-width '-10%'" \
+  "Close window                   | close-window" \
+  "Toggle floating                | toggle-window-floating" \
+  "Focus first column             | focus-column-first" \
+  "Focus last column              | focus-column-last" \
+  "Consume window left            | consume-or-expel-window-left" \
+  "Consume window right           | consume-or-expel-window-right" \
+  "Move column to monitor left    | move-column-to-monitor-left" \
+  "Move column to monitor right   | move-column-to-monitor-right" \
+  "Power off monitors             | power-off-monitors" \
+  "Power on monitors              | power-on-monitors" \
+  "Reload config                  | load-config-file" \
+  "Show hotkey overlay            | show-hotkey-overlay" \
+  "Quit niri                      | quit --skip-confirmation" \
+  | fuzzel --dmenu --prompt "niri " --lines 15)
+
+[ -z "$choice" ] && exit 0
+
+# Strip the label, keep only the action+args after the pipe
+action=$(printf '%s' "$choice" | sed 's/^[^|]*|[[:space:]]*//')
+
+# Word-split via sh -c so quoted args parse as separate argv
+sh -c "niri msg action $action"

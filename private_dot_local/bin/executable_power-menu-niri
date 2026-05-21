@@ -2,7 +2,7 @@
 chosen=$(printf "Lock\nLogout\nReboot\nShutdown" | fuzzel --dmenu --prompt "Power ")
 case "$chosen" in
     Lock)     hyprlock ;;
-    Logout)   hyprctl dispatch exit ;;
+    Logout)   niri msg action quit --skip-confirmation ;;
     Reboot)   loginctl reboot ;;
     Shutdown) loginctl poweroff ;;
 esac

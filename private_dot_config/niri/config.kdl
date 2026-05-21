@@ -103,11 +103,23 @@ binds {
     Mod+V       { toggle-window-floating; }
     Mod+Return  { spawn "ghostty"; }
     Mod+Shift+Return { spawn "alacritty"; }
-    Mod+O       { spawn "sh" "-c" "pkill wofi || wofi --show drun"; }  // wofi hardcoded to `top` layer; fullscreen covers it — exit fullscreen first
+    Mod+D       { spawn "sh" "-c" "pkill fuzzel || fuzzel"; }  // launcher — fuzzel (install: sudo xbps-install -S fuzzel)
     Mod+Shift+Q { spawn "power-menu-niri"; }
-    Mod+Shift+E { quit skip-confirmation=true; }  // direct-exit fallback if wofi/power-menu misbehaves
-    Mod+Shift+F { fullscreen-window; }              // toggle fullscreen (escape route — wofi can't draw over fullscreen)
-    Mod+L       { spawn "hyprlock"; }  // hyprlock works on niri via ext-session-lock-v1
+    Mod+Shift+E { quit skip-confirmation=true; }  // direct-exit fallback
+    Mod+L       { spawn "hyprlock"; }  // works on niri via ext-session-lock-v1
+
+    // Scrollable-tiling essentials
+    Mod+F       { fullscreen-window; }
+    Mod+M       { maximize-column; }
+    Mod+W       { toggle-overview; }
+    Mod+R       { switch-preset-column-width; }
+    Mod+Comma   { consume-or-expel-window-left; }
+    Mod+Period  { consume-or-expel-window-right; }
+    Mod+Home    { focus-column-first; }
+    Mod+End     { focus-column-last; }
+
+    Mod+Shift+Slash { show-hotkey-overlay; }  // Mod+? — re-show keybind help
+    Mod+Slash       { spawn "niri-palette"; } // fuzzel command palette for niri actions
 
     Mod+Left    { focus-column-left; }
     Mod+Right   { focus-column-right; }
@@ -156,7 +168,7 @@ binds {
     Mod+Print   { spawn "screenshot-menu-niri"; }
 
     Mod+I       { spawn "fcitx5-switch"; }
-    Mod+F       { spawn "ghostty" "-e" "yazi"; }
+    Mod+E       { spawn "ghostty" "-e" "yazi"; }
 }
 
 // Window rules — port of ~/.config/hypr/hyprland.d/windows-and-workspaces.conf.

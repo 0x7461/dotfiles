@@ -27,15 +27,20 @@ case "$choice" in
         grim -g "$region" "$OUT" && save "$OUT"
         ;;
     "Window select")
-        region=$(hyprctl clients -j | python3 -c "
+        # niri equivalent of `hyprctl clients -j`: `niri msg --json windows`.
+        # Returns currently-mapped windows with `layout.pos_in_scrolling_layout`
+        # and `layout.tile_size`. Schema differs from Hyprland's `at`/`size`.
+        region=$(niri msg --json windows | python3 -c "
 import json, sys
-clients = json.load(sys.stdin)
+windows = json.load(sys.stdin)
 lines = []
-for c in clients:
-    if c['mapped']:
-        at = c['at']
-        size = c['size']
-        lines.append('{},{} {}x{} {}'.format(at[0], at[1], size[0], size[1], c['title']))
+for w in windows:
+    layout = w.get('layout') or {}
+    pos = layout.get('pos_in_scrolling_layout')
+    size = layout.get('tile_size') or layout.get('window_size')
+    title = w.get('title') or ''
+    if pos and size:
+        lines.append('{},{} {}x{} {}'.format(int(pos[0]), int(pos[1]), int(size[0]), int(size[1]), title))
 print('\n'.join(lines))
 " | slurp -r) || exit 0
         grim -g "$region" "$OUT" && save "$OUT"
