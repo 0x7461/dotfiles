@@ -46,7 +46,7 @@ environment {
 }
 
 layout {
-    gaps 10
+    gaps 5
     center-focused-column "never"
     preset-column-widths {
         proportion 0.33333
@@ -56,8 +56,8 @@ layout {
     default-column-width { proportion 0.5; }
 
     focus-ring {
-        width 1
-        active-color "#939ab7"
+        width 1.5
+        active-color "#99a0d5"
         inactive-color "#494d64"
     }
 
@@ -180,6 +180,13 @@ binds {
 // niri has no "maximize" concept → no suppressevent rule needed.
 // "no gaps when only" (`w[tv1]`/`f[1]`) has no conditional-gaps equivalent
 // in niri — accepted regression, gaps stay uniform.
+
+// Global: round all window corners. clip-to-geometry trims the actual content
+// to match (otherwise apps draw past the rounded mask).
+window-rule {
+    geometry-corner-radius 6
+    clip-to-geometry true
+}
 
 // Terminals: open at full column width (visual parity with how firefox feels)
 window-rule {
