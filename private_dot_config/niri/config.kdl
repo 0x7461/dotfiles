@@ -68,6 +68,11 @@ layout {
 
 prefer-no-csd
 
+cursor {
+    xcursor-theme "Adwaita"
+    xcursor-size 20
+}
+
 hotkey-overlay {
     skip-at-startup
 }
@@ -104,9 +109,9 @@ binds {
     Mod+Return  { spawn "ghostty"; }
     Mod+Shift+Return { spawn "alacritty"; }
     Mod+D       { spawn "sh" "-c" "pkill fuzzel || fuzzel"; }  // launcher — fuzzel (install: sudo xbps-install -S fuzzel)
-    Mod+Shift+Q { spawn "power-menu-niri"; }
+    Mod+Shift+Q { spawn "power-menu"; }
     Mod+Shift+E { quit skip-confirmation=true; }  // direct-exit fallback
-    Mod+L       { spawn "hyprlock"; }  // works on niri via ext-session-lock-v1
+    Mod+L       { spawn "hyprlock"; }  // ext-session-lock-v1; deps: hyprcursor/hyprgraphics/hyprlang/hyprutils
 
     // Scrollable-tiling essentials
     Mod+F       { fullscreen-window; }
@@ -165,7 +170,7 @@ binds {
     XF86AudioPrev  allow-when-locked=true { spawn "playerctl" "previous"; }
 
     Print       { spawn "screenshot-region"; }
-    Mod+Print   { spawn "screenshot-menu-niri"; }
+    Mod+Print   { spawn "screenshot-menu"; }
 
     Mod+I       { spawn "fcitx5-switch"; }
     Mod+E       { spawn "ghostty" "-e" "yazi"; }

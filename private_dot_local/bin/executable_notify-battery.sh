@@ -1,2 +1,5 @@
-#!/bin/bash
-hyprctl notify -1 7000 "rgb(234080)" "Battery [$(cat /sys/class/power_supply/BAT0/capacity_level)]: $(cat /sys/class/power_supply/BAT0/status), $(cat /sys/class/power_supply/BAT0/capacity)%"
+#!/bin/sh
+level=$(cat /sys/class/power_supply/BAT0/capacity_level)
+status=$(cat /sys/class/power_supply/BAT0/status)
+pct=$(cat /sys/class/power_supply/BAT0/capacity)
+notify-send -t 7000 "Battery [$level]" "$status, $pct%"

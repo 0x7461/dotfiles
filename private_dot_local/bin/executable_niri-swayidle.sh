@@ -9,6 +9,8 @@
 #   900s  power off monitors
 #   3600s idle shutdown
 # before-sleep: lock first.
+# lock/unlock: bridge logind LockSession/UnlockSession D-Bus signals so
+# `loginctl lock-session` (and anything else calling it) actually locks.
 # Note: `after-sleep` event is intentionally omitted — Void's swayidle is too
 # old to support it, and niri restores monitors on resume on its own.
 
@@ -17,9 +19,11 @@ exec swayidle -w \
         resume   'brightnessctl -rd rgb:kbd_backlight' \
     timeout 300  'brightnessctl -s set 10' \
         resume   'brightnessctl -r' \
-    timeout 600  'loginctl lock-session' \
+    timeout 600  'pidof hyprlock || hyprlock' \
         resume   'notify-send "Welcome back!"' \
     timeout 900  'niri msg action power-off-monitors' \
         resume   'niri msg action power-on-monitors && brightnessctl -r' \
     timeout 3600 'idle-shutdown' \
-    before-sleep 'loginctl lock-session'
+    before-sleep 'pidof hyprlock || hyprlock' \
+    lock         'pidof hyprlock || hyprlock' \
+    unlock       'pkill -USR1 hyprlock'
