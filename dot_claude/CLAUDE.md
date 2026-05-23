@@ -1,8 +1,8 @@
 # Global Preferences
-<!-- Last updated: 2026-05-09 -->
+<!-- Last updated: 2026-05-23 -->
 
 ## System
-- Void Linux (glibc), Hyprland, runit (not systemd). PipeWire audio. Catppuccin Macchiato theme.
+- Void Linux (glibc), niri (Wayland, scrollable-tiling, KDL config), runit (not systemd). PipeWire audio. Catppuccin Macchiato theme. hyprlock kept as lock screen.
 - Custom packages: `~/void-packages` + `xi`. Official: `sudo xbps-install`.
 - User runs all sudo commands themselves.
 
