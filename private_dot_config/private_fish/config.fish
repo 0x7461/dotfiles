@@ -14,10 +14,6 @@ if status is-interactive
 		tmux attach -t main 2>/dev/null; or tmux new -s main
 	end
 
-	function hl
-		exec dbus-run-session -- Hyprland
-	end
-
 	function ni
 		exec dbus-run-session -- niri --session
 	end
