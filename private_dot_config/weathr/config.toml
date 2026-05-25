@@ -1,0 +1,13 @@
+# weathr config — schema reverse-engineered from the binary
+# Valid display variants: "city", "coordinates", "mixed"
+
+[location]
+latitude = 37.5660
+longitude = 126.9784
+city_name_language = "en"
+display = "city"
+
+[units]
+temperature = "celsius"
+wind_speed = "kmh"
+precipitation = "mm"
