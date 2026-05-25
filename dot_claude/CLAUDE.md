@@ -1,5 +1,5 @@
 # Global Preferences
-<!-- Last updated: 2026-05-23 -->
+<!-- Last updated: 2026-05-24 -->
 
 ## System
 - Void Linux (glibc), niri (Wayland, scrollable-tiling, KDL config), runit (not systemd). PipeWire audio. Catppuccin Macchiato theme. hyprlock kept as lock screen.
@@ -11,7 +11,7 @@
 
 - **NEVER alter or delete files in ~/archive without explicit user permission.** No exceptions.
 - IDEAS.md is **index only** — status + one-liner + link. No research blobs.
-- This file: **soft limit 200 lines.** Be comprehensive on rules I've actually had to enforce — under-specified rules invite rationalization. Cut hedges, examples, and "for instance" padding ruthlessly. Quarterly trim pass.
+- This file: **soft limit 200 lines.** Be comprehensive on rules I've actually had to enforce — under-specified rules invite rationalization. Cut hedges, examples, and "for instance" padding ruthlessly.
 - MEMORY.md: disposable scratchpad, 200-line hard truncation.
 - **No `project_*.md` files in memory.** Memory is for behavior + cross-project reference only. Project-specific content goes to that project's PLAN.md.
 - **No INSIGHTS.md / research.md / notes.md files anywhere.** They drift into stale shadow-docs. Deep internals: PLAN.md `## Internals` (narrative) or `agent_docs/<topic>.md` (imperative agent reference when AGENTS.md overflows). Per-project doc layout: see `## Documentation`.
@@ -57,6 +57,7 @@
 | "I should match the existing pattern" | Only if the existing pattern is correct. Match-blindly propagates mistakes. Flag, don't propagate. |
 | "Let me add a test for this small change" | Only if the user asked or the project has a test discipline I can see. Drive-by tests are scope creep. |
 | "I'll rewrite this section from memory" | Read the source first (don't reconstruct). Default to Edit for targeted changes; reach for a Bash script only when the mutation is mechanical across many files or the script is itself the clearest spec. Self-review the diff before confirming. |
+| "Let me pause and ask if you want me to continue" | Mid-task check-ins train the user to babysit. Continue until the task is done. Stop only when: (a) the next step is genuinely ambiguous, (b) the action is destructive/irreversible, (c) you're about to deviate from what you said you'd do. Completing a sub-step is not a stop point. |
 
 **Learning projects (no-agent zone):** For learning-tagged ideas (#48–53 and similar in IDEAS.md), pair-write rather than generate. Explain trade-offs aloud; don't accept generated code without modifying it. These exist precisely to keep the writing-code muscle alive — agentic mode defeats their purpose.
 
@@ -78,8 +79,6 @@
 - Fresh session — if context is muddied or off-track
 - Warn if the task is shaping up to need 20+ tool calls.
 
-**Usage:** remind `/usage` at start of substantial sessions.
-
 ## Output Format
 
 **Use HTML when** the output is a terminal artifact — read once, shared, or interacted with (reports, dashboards, design explorations, PR explainers, throwaway editors with export buttons). HTML unlocks SVG, color, tables, interactions that Markdown can't express.
@@ -100,7 +99,6 @@
 - **settings.local.json:** Edit tool fails mid-edit — always use Write tool.
 - **History lookups:** `history.jsonl` is 9MB+ — never Read it. Filter via `Bash python3 -c` or recap.py.
 - **runit user services:** `~/service/`, not `/var/service/`. `SVDIR=~/service sv <cmd>`. Creating a service dir = runsv discovers it and starts immediately; the `down` sentinel file only blocks auto-start at *next boot*, not first discovery. To stage without running: create files, then `sv down <name>`.
-- **`claude -p` subprocess:** unset `CLAUDECODE` env, set `cmd.Dir=/tmp`, `--allowedTools ""` for chat mode. Add `--bare` to skip CLAUDE.md/settings discovery (up to 10x faster for non-interactive use).
+- **`claude -p` subprocess:** unset `CLAUDECODE` env, set `cmd.Dir=/tmp`, `--allowedTools ""` for chat mode. `--bare` skips CLAUDE.md/settings *and* auth discovery — only use it when the caller manages auth itself (e.g. `ANTHROPIC_API_KEY` env), otherwise expect "Not logged in · Please run /login". For pro-plan sessions, drop `--bare`.
 - **CC repo (anthropics/claude-code):** closed-source — only CHANGELOG.md exists, no source code. Don't search it for internals; use the binary at `~/.local/share/claude/versions/`.
 - **CC settings not in chezmoi:** `~/.claude/settings.json` — add manually after reinstall. (`statusline.sh` IS in chezmoi.)
-- **`summarize` fallbacks:** if a YouTube call returns empty, try `--youtube yt-dlp` then bump `--model sonnet` or `flash`. Gemini 2.5 Pro is broken (empty output); skip it. Full recovery path in `~/.claude/skills/summarize/SKILL.md`. `--markdown-mode llm` is for `--extract --format md`, not the summary call.
