@@ -1,6 +1,6 @@
 ---
 name: pkg
-description: Create or update a void-packages template for a GitHub-hosted package. Fetches latest release, computes checksum, writes the template, prompts to build with vpm. Use when the user says /pkg <name> <owner/repo> or asks to add/update a void package.
+description: Create or update a void-packages template for a GitHub-hosted package. Fetches latest release, computes checksum, writes the template, prompts to build with vxpm. Use when the user says /pkg <name> <owner/repo> or asks to add/update a void package.
 user-invocable: true
 allowed-tools:
   - Bash
@@ -79,7 +79,7 @@ Always use `${version}` in `distfiles`, never hardcode. On version-bump updates:
 
 ### 6. Show + next step
 
-Print the final template. Then tell the user: build with `cd ~/void-packages && ./xbps-src pkg <pkgname>` (or via vpm). For updates, mention committing after a successful build.
+Print the final template. Then tell the user: build with `cd ~/void-packages && ./xbps-src pkg <pkgname>` (or via vxpm). For updates, mention committing after a successful build.
 
 ## Notes
 
