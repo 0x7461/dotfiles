@@ -1,0 +1,28 @@
+{
+  "source": {
+    "max_delivery": 30,
+    "feeds": [
+      {"name": "HN Best",         "url": "https://hnrss.org/best",                       "max_items": 10, "discussion_label": "HN"},
+      {"name": "Lobsters",        "url": "https://lobste.rs/rss",                        "max_items": 10},
+      {"name": "Hackaday",        "url": "https://hackaday.com/blog/feed/",              "max_items": 10},
+      {"name": "Quanta Magazine", "url": "https://www.quantamagazine.org/feed/",         "max_items": 10},
+      {"name": "Simon Willison",  "url": "https://simonwillison.net/atom/everything/",   "max_items": 10},
+      {"name": "Phoronix",        "url": "https://www.phoronix.com/rss.php",             "max_items": 10},
+      {"name": "Ars Technica",    "url": "https://feeds.arstechnica.com/arstechnica/index", "max_items": 10},
+      {"name": "PetaPixel",       "url": "https://petapixel.com/feed/",                  "max_items": 10},
+      {"name": "GSMArena",        "url": "https://www.gsmarena.com/rss-news-reviews.php3", "max_items": 10},
+      {"name": "Dan Luu",         "url": "https://danluu.com/atom.xml",                  "max_items": 5,  "skip_curate": true},
+      {"name": "Julia Evans",     "url": "https://jvns.ca/atom.xml",                     "max_items": 5,  "skip_curate": true},
+      {"name": "マリウス",         "url": "https://マリウス.com/index.xml",                 "max_items": 5,  "skip_curate": true}
+    ],
+    "curate": {
+      "enabled": true,
+      "target": 15,
+      "backend": "claude-code",
+      "model": "haiku",
+      "fallback_backend": "ollama",
+      "fallback_model": "gemma4:e4b",
+      "timeout_seconds": 60
+    }
+  }
+}
