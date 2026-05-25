@@ -3,8 +3,10 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-05-09
-**Last CC cleanup:** 2026-04-24
+**Last reviewed:** 2026-05-25
+**Last CC cleanup:** 2026-05-24
+
+> **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
 ---
 
@@ -94,37 +96,6 @@ Only runs if `/run/media/ta/T7 Shield/` is mounted. Skip silently if not.
   ```sh
   find "/run/media/ta/T7 Shield/_meta" -maxdepth 1 -type d -name '*-backup-*' -mtime +14 2>/dev/null
   ```
-
-## Weekly sweep (run manually or when prompted)
-
-- [ ] **Drift detection** (run these as a block):
-  - `find ~/projects -name "INSIGHTS.md" -o -name "research.md" -o -name "notes.md"` — flag any; these should be folded into PLAN.md
-  - `find ~/.claude/projects -name "project_*.md"` — flag any; project content belongs in PLAN.md
-  - `wc -l ~/projects/*/PLAN.md | awk '$1 > 300'` — flag PLAN.md files over the 300-line soft limit
-  - `wc -l ~/projects/*/AGENTS.md 2>/dev/null | awk '$1 > 300'` — flag AGENTS.md files over the 300-line hard limit (split to `agent_docs/` if hit)
-  - For each project with AGENTS.md, check `CLAUDE.md` exists alongside as `@AGENTS.md` shim — flag missing
-  - For each project with code (src/, *.go, *.py, *.rs, etc.) and PLAN.md but no AGENTS.md — flag rollout candidate (per agent-docs convention)
-  - For each PLAN.md, compare its `**Status:**` line against the matching IDEAS.md entry — flag mismatches
-- [ ] **Repo staleness sweep** — for each project repo, check git age + dirtiness:
-  ```sh
-  for d in ~/projects/*/; do
-    [ -d "$d/.git" ] || continue
-    age=$(( ( $(date +%s) - $(git -C "$d" log -1 --format=%ct 2>/dev/null || echo $(date +%s)) ) / 86400 ))
-    dirty=$(git -C "$d" status --porcelain 2>/dev/null | wc -l)
-    [ "$age" -gt 3 ] && [ "$dirty" -gt 0 ] && echo "$(basename $d): ${age}d since commit, $dirty dirty"
-  done
-  ```
-- [ ] PLAN.md `Updated:` dates — flag any >60 days on Maintain/Implement projects
-- [ ] `chezmoi status` — no unmanaged config drift
-- [ ] All runit services healthy (`SVDIR=~/service sv status`)
-- [ ] CLAUDE.md under 200 lines soft limit
-- [ ] MEMORY.md — prune stale session notes
-- [ ] This checklist — if >30 days since last review, revise it
-- [ ] **Monthly CC cleanup** — if >30 days since `Last CC cleanup:` above:
-  - CLAUDE.md — reread every rule; rewrite stale/vague ones, remove anything obvious or no longer true, consolidate duplicates, stay under 200 lines
-  - MEMORY.md — remove scratchpad entries that are resolved or no longer relevant; promote anything durable to CLAUDE.md or obsidian vault
-  - settings.json — review flags; remove workarounds that are no longer needed
-  - Update `Last CC cleanup:` date when done.
 
 ## Checklist self-revision triggers
 
