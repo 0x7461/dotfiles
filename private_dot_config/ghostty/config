@@ -1,3 +1,4 @@
-theme = catppuccin-macchiato
+theme = Catppuccin Macchiato
 font-family = Iosevka Term
 font-size = 12
+env = USE_TMUX=0

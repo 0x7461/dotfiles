@@ -18,5 +18,8 @@ italic = { family = "Iosevka Term", style = "Italic" }
 bold_italic = { family = "Iosevka Term", style = "Bold Italic" }
 
 [terminal]
-shell = { program = "/usr/bin/tmux", args = ["new-session", "-A", "-D", "-s", "main"] }
+shell = { program = "/usr/bin/fish" }
+
+[env]
+USE_TMUX = "1"
 
