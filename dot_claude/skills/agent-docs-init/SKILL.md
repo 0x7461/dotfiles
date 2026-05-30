@@ -62,6 +62,7 @@ For each file, mirror the canonical sections from the spec. Where project-specif
 - Project layout *(scan top-level dirs and annotate)*
 - Boundaries & gotchas (Always/Never/Ask first/Untested) — pre-populate one Never item, rest are TODO blocks:
   - **Never:** rewrite existing content from memory. Copy verbatim, make targeted edits, self-review for unauthorized mutations. Escalate to the user only when uncertain whether a change is intentional.
+- **Services** *(only if the project owns runit services)* — one `` - `name`: state — note `` bullet per service; `persistent` = up and survives reboot (reconciled by `maint-watch doctor`; see spec)
 - Where to look — pointers to README/PLAN
 
 **`CLAUDE.md`** — exactly one line:
