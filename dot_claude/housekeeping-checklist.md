@@ -3,7 +3,7 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-05-25
+**Last reviewed:** 2026-05-30
 **Last CC cleanup:** 2026-05-24
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
@@ -63,6 +63,7 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 - [ ] Log directory exists (`log/main/` for svlogd)
 - [ ] Service actually running (`SVDIR=~/service sv status <name>`)
 - [ ] .env file has all required vars
+- [ ] **`## Services` declaration** — if a project owns the service, its AGENTS.md `## Services` block declares it (`persistent` = up + survives reboot). Run `maint-watch doctor` to reconcile declared vs actual; a leftover `down` sentinel on a persistent service means it silently parks on the next reboot.
 
 ## After botkit changes
 
