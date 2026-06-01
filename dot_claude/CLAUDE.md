@@ -70,6 +70,7 @@
 - **Read target file and related files before any edit.** Never edit from assumptions or memory alone.
 - No sycophantic openers or closing fluff. Terse by default.
 - Recommend starting a new session when switching to an unrelated task.
+- **Git commits:** trailer is `Co-Authored-By: <model-code-name>` (e.g. `Opus`, `Sonnet`, `Haiku`) — code name only, no version, no email.
 
 **Evidence as exit step:** Every implementation task ends with verifiable evidence — file path, test output, working command, or a concrete artifact. "Done" without evidence is incomplete. If the work can't be verified (e.g. UI feature, no test runner), say so explicitly rather than implying success.
 
