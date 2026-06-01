@@ -64,6 +64,14 @@ layout {
     border {
         off
     }
+
+    shadow {
+        on
+        softness 25
+        spread 3
+        offset x=0 y=4
+        color "#00000059"
+    }
 }
 
 prefer-no-csd
@@ -100,6 +108,11 @@ spawn-at-startup "sh" "-c" "rm -f $XDG_RUNTIME_DIR/wob-br.sock && mkfifo $XDG_RU
 // keeping them out of KDL avoids brittle multi-line spawn-at-startup argv
 // (which silently swallowed the previous draft and never spawned swayidle).
 spawn-at-startup "/home/ta/.local/bin/niri-swayidle.sh"
+
+// Inhibit idle only while PipeWire is actually outputting audio. Pairs with
+// media.wakelock=false in Firefox's user.js: silent/paused tabs no longer
+// freeze the idle clock, but real playback still keeps the screen awake.
+spawn-at-startup "wayland-pipewire-idle-inhibit"
 
 // Keybinds — port of ~/.config/hypr/hyprland.d/keybinds.conf.
 binds {
@@ -186,6 +199,12 @@ binds {
 window-rule {
     geometry-corner-radius 6
     clip-to-geometry true
+}
+
+// Subtle dimming of unfocused windows.
+window-rule {
+    match is-active=false
+    opacity 0.96
 }
 
 // Terminals: open at full column width (visual parity with how firefox feels)
