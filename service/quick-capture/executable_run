@@ -1,4 +1,0 @@
-#!/bin/sh
-export PATH="/home/ta/.proto/bin:/home/ta/.proto/shims:$PATH"
-cd /home/ta/projects/quick-capture
-exec uv run uvicorn main:app --host 127.0.0.1 --port 7878 2>&1
