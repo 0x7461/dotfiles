@@ -63,6 +63,7 @@ For each file, mirror the canonical sections from the spec. Where project-specif
 - Boundaries & gotchas (Always/Never/Ask first/Untested) — pre-populate one Never item, rest are TODO blocks:
   - **Never:** rewrite existing content from memory. Copy verbatim, make targeted edits, self-review for unauthorized mutations. Escalate to the user only when uncertain whether a change is intentional.
 - **Services** *(only if the project owns runit services)* — one `` - `name`: state — note `` bullet per service; `persistent` = up and survives reboot (reconciled by `maint-watch doctor`; see spec)
+- **Teardown** *(when the project has runtime/installed state to remove)* — scaffold the frame from the spec: *local* removal (stop/remove service, data paths), *de-declare* the Services block, *portfolio* retirement (IDEAS → Archived, PLAN History line, cross-ref sweep), *dependents*. Generic boilerplate ships ready; italic per-project slots (service name, data paths, dependents) are TODO.
 - Where to look — pointers to README/PLAN
 
 **`CLAUDE.md`** — exactly one line:
