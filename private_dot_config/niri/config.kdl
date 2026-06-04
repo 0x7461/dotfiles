@@ -33,6 +33,10 @@ environment {
     XCURSOR_THEME "Adwaita"
     XCURSOR_SIZE "20"
 
+    // ssh-agent: fixed socket (agent spawned at startup below). Literal uid 1000
+    // — niri's environment{} doesn't shell-expand $XDG_RUNTIME_DIR.
+    SSH_AUTH_SOCK "/run/user/1000/ssh-agent.sock"
+
     // NVIDIA Wayland
     GBM_BACKEND "nvidia-drm"
     __GLX_VENDOR_LIBRARY_NAME "nvidia"
@@ -96,6 +100,11 @@ spawn-at-startup "mako"
 spawn-at-startup "runsvdir" "/home/ta/service"
 spawn-at-startup "fcitx5" "-d"
 spawn-at-startup "udiskie" "--tray"
+
+// ssh-agent on a fixed socket (SSH_AUTH_SOCK set in environment{} above).
+// rm stale socket first — same idiom as the wob FIFOs below. AddKeysToAgent
+// (~/.ssh/config) caches the key on first use, so passphrase is typed once per boot.
+spawn-at-startup "sh" "-c" "rm -f $XDG_RUNTIME_DIR/ssh-agent.sock; exec ssh-agent -D -a $XDG_RUNTIME_DIR/ssh-agent.sock"
 
 // wob FIFOs — sh -c needed for the redirect/pipe chain.
 spawn-at-startup "sh" "-c" "rm -f $XDG_RUNTIME_DIR/wob-vol.sock && mkfifo $XDG_RUNTIME_DIR/wob-vol.sock && tail -f $XDG_RUNTIME_DIR/wob-vol.sock | wob -c ~/.config/wob/volume.ini"
