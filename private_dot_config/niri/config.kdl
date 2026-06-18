@@ -1,6 +1,5 @@
-// niri config — first-pass port from ~/.config/hypr/.
-// Status: DRAFT. Not yet flipped as default; launched from spare TTY only.
-// Hyprland config remains canonical until Phase 6.
+// niri config — sole Wayland compositor since 2026-05-23 (Hyprland removed).
+// See ~/projects/niri/PLAN.md for migration history.
 
 // Reference: https://github.com/niri-wm/niri/wiki/Configuration
 
@@ -92,7 +91,7 @@ hotkey-overlay {
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 // Autostart — mirror of ~/.config/hypr/hyprland.d/autostarts.conf.
-spawn-at-startup "swaybg" "-i" "/home/ta/.wallpapers/japan.png"
+spawn-at-startup "swaybg" "-i" "/home/ta/.wallpapers/monochrome.png"
 // PipeWire/wireplumber/pipewire-pulse are now supervised by runit (~/service/),
 // independent of compositor lifetime. start-sound.sh removed from autostart.
 spawn-at-startup "/usr/libexec/polkit-gnome-authentication-agent-1"
