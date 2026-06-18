@@ -23,6 +23,11 @@
       "fallback_backend": "ollama",
       "fallback_model": "gemma4:e4b",
       "timeout_seconds": 60
+    },
+    "summarize": {
+      "enabled": true,
+      "model": "sonnet",
+      "timeout_seconds": 120
     }
   }
 }

@@ -21,7 +21,7 @@
 - **Per-project doc tiers** (canonical spec: `~/projects/agent-docs/PLAN.md`):
   - `AGENTS.md` — agent-imperative. Setup, commands, layout, Boundaries (Always/Never/Ask first/Untested), workflows. Aim <150 lines, hard <300. Cross-tool standard.
   - `CLAUDE.md` — one-line `@AGENTS.md` shim. Always create alongside AGENTS.md.
-  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research, History. `Updated: YYYY-MM-DD` header. Soft limit ~300 lines, trim-on-done.
+  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research, History. `Updated: YYYY-MM-DD` header. Soft limit ~300 lines, trim-on-done. **Backlog items are `- [ ]` checkboxes** (one per top-level item; sub-bullets plain; shipped items removed → History, never `- [x]`).
   - `README.md` — optional end-user docs. Skip for personal-use tools.
   - `agent_docs/<topic>.md` — only when imperative content overflows AGENTS.md.
 - `~/obsidian-vault/system/*.md` — system knowledge | `dev/*.md` — dev knowledge
@@ -70,7 +70,7 @@
 - **Read target file and related files before any edit.** Never edit from assumptions or memory alone.
 - No sycophantic openers or closing fluff. Terse by default.
 - Recommend starting a new session when switching to an unrelated task.
-- **Git commits:** trailer is `Co-Authored-By: <model-code-name>` (e.g. `Opus`, `Sonnet`, `Haiku`) — code name only, no version, no email.
+- **Git commits:** commit proactively when a logical unit is done (completed feature/fix; before a rebase, feature-switch, or `/housekeeping`) — **don't wait to be asked.** Push only when asked; branch first if on the default branch. Trailer `Co-Authored-By: <model-code-name>` (e.g. `Opus`) — code name only, no version, no email.
 
 **Evidence as exit step:** Every implementation task ends with verifiable evidence — file path, test output, working command, or a concrete artifact. "Done" without evidence is incomplete. If the work can't be verified (e.g. UI feature, no test runner), say so explicitly rather than implying success.
 
