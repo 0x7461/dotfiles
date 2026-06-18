@@ -63,24 +63,24 @@ done
 
 ## 4. Project Tasks
 
-Scan PLAN.md files for open items in either format:
+Scan PLAN.md files for open backlog items:
 
 ```sh
 for plan in ~/projects/*/PLAN.md; do
   project=$(basename $(dirname "$plan"))
-  # grep -c always prints a count (incl. 0) on stdout but exits 1 when 0 matches.
-  # Don't fall back with `|| echo 0` — that appends a second "0" and breaks the arithmetic.
-  checkboxes=$(grep -c '^- \[ \]' "$plan" 2>/dev/null; true)
-  has_backlog=$(awk '/^## Backlog/{flag=1; next} /^## /{flag=0} flag && /^- /' "$plan" 2>/dev/null | wc -l)
-  total=$((checkboxes + has_backlog))
-  [ "$total" -gt 0 ] && echo "$project: $total open ($checkboxes checkboxes, $has_backlog backlog items)" || true
+  # Backlog items are `- [ ]` checkboxes (agent-docs spec). Count unchecked boxes
+  # only — shipped items are removed (trim-on-done), never left as `- [x]`.
+  # grep -c prints 0 and exits 1 on no match; `; true` keeps the loop alive.
+  # Don't fall back with `|| echo 0` — that appends a second "0".
+  open=$(grep -c '^- \[ \]' "$plan" 2>/dev/null; true)
+  [ "$open" -gt 0 ] && echo "$project: $open open" || true
 done
 :  # pin exit 0
 ```
 
-Most projects use the agent-docs `## Backlog` convention; older projects use `- [ ]` checkboxes. The scan covers both.
+Backlog items follow the agent-docs convention: one `- [ ]` checkbox per top-level item (sub-bullets are plain `- ` detail and aren't counted). This scan counts unchecked top-level checkboxes — no double-counting (the older `checkboxes + backlog-bullets` sum counted a checkbox-under-Backlog twice).
 
-**Caveat — this count is a doc-derived proxy, not verified open work.** It counts every top-level `- ` line under `## Backlog`, which includes shipped-but-untrimmed detail, not just open tasks. A high count may mean the project owes a trim-on-done pass (as maint-watch did at 27 — all shipped phases) rather than having real pending work. Present it as "worth a look," not confirmed open-work; a big number alone is not alarm.
+**Caveat — this count is a doc-derived proxy, not verified open work.** An open `- [ ]` may be blocked, gated, or near-done (e.g. archiver's items are all NAS-gated / externally-blocked). A non-zero count is "worth a look," not confirmed pending work; a big number may instead mean the project owes a trim-on-done pass. Read the actual items before treating it as a to-do.
 
 ## 5. IDEAS.md Open Projects
 
