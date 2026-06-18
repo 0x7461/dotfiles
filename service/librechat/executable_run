@@ -1,0 +1,43 @@
+#!/bin/sh
+exec 2>&1
+cd /home/ta/projects/librechat
+
+# Start from a clean slate. A previous failed cycle (e.g. a hard crash) can
+# leave the stack half-dead in ways `up -d` won't repair on its own:
+#   - an orphan mongod still holding ./data-node/mongod.lock, so every fresh
+#     chat-mongodb exits 100 ("Another mongod instance is already running") and
+#     the whole stack crash-loops for hours, pinning a core (CPU/fan spike).
+#   - an orphan rootlessport still bound to :3080.
+# `down` reaps what podman still tracks; the kills below catch orphans it has
+# lost track of (down alone does NOT reap those — verified during an incident).
+podman-compose -f compose.yaml down 2>/dev/null
+
+# Orphan mongod survives `down` when podman has lost track of it. It runs as a
+# sub-uid (not pid 1), holds the WiredTiger lock on ./data-node, and is the lone
+# `mongod --noauth` process on this host. TERM lets WiredTiger flush cleanly.
+pkill -TERM -f 'mongod --noauth' 2>/dev/null
+
+# Orphan rootlessport can hold :3080 even after `podman rm`, causing every new
+# container to land in Created state with "address already in use".
+if ss -ltn 'sport = :3080' 2>/dev/null | grep -q ':3080'; then
+    echo "librechat: :3080 still held after down — killing orphan rootlessport"
+    pkill -f 'rootlessport.*' 2>/dev/null
+fi
+
+sleep 1
+podman-compose -f compose.yaml up -d
+
+# Verify LibreChat actually transitioned to Running before exec'ing wait.
+# Without this check, a Created-state container makes `podman wait` return
+# immediately, runit restarts in ~4s, and failures compound into stale
+# conmons / stuck mongods.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if podman ps --format '{{.Names}}' | grep -qx LibreChat; then
+        exec podman wait LibreChat
+    fi
+    sleep 2
+done
+
+echo "librechat: LibreChat container failed to reach Running state; backing off"
+sleep 30
+exit 1
