@@ -1,3 +1,0 @@
-#!/bin/sh
-cd /home/ta/projects/botkit
-exec ./bin/ai-agent 2>&1

@@ -59,7 +59,6 @@ After showing the summary, ask if the user wants to:
 - Sessions are identified by their first 8 chars of UUID shown in brackets
 - The project path shows where Claude Code was running at the time
 - Timestamps are local time
-- **Telegram section**: shows recent conversations with The Smartass bot (ai-agent), grouped by 30min gaps. First and last user messages shown as topic indicators. Offer to continue any Telegram thread in the current CC session.
 
 ## Token burn rate
 
