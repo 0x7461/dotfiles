@@ -60,6 +60,7 @@ Pick the most useful next step:
 | `dashboard.md` | Current portfolio snapshot | After rebalances |
 | `log.md` | Monthly entries (6-bullet, append) | Monthly checkpoint |
 | `strategy.md` | Policy — targets, rules, cadence | Strategy changes only |
+| `budget.md` | Monthly "every dollar a job" plan (YNAB-lite) | Income or fixed-cost changes |
 | `funds.md` | Fund directory — mandate, bucket, platform | Annual or when fund changes |
 | `accounts.md` | Non-fund accounts (cash, EF, FX) | When accounts change |
 | `logs/` | Detailed session logs (Korea assignments, etc.) | Per event |
@@ -71,7 +72,8 @@ Pick the most useful next step:
 - **Monthly cadence:** light — 5 min, routes surplus only, never sells.
 - **Formal cadence:** June + December — strategy review + full rebalance math.
 - **PAL rule.** All arithmetic — bucket totals, gaps, allocation splits, deployment math — runs through Python (`python3 -c '...'` via Bash), never prose. Prose math has been wrong before; Python is the source of truth.
-- **Sign-off gate.** Never edit `log.md` or `dashboard.md` until the user confirms the draft. Show the draft, take corrections, then write.
+- **Sign-off gate.** Never edit `log.md`, `dashboard.md`, or `budget.md` until the user confirms the draft. Show the draft, take corrections, then write.
+- **Budget pass.** The monthly checkpoint reconciles income against `budget.md`'s jobs; investable surplus is the residual after jobs are funded (YNAB-lite, see CHECKPOINT.md). Light by design — no per-transaction categories.
 - **Don't read `logs/` files** unless the user asks about a specific past session.
 - **Never display** raw credentials from `accounts.md` or any file with API keys — summarize balances only.
 - **HTML rebalance view:** during `/finance rebalance`, offer to generate a single HTML file with allocation sliders and a "copy as rebalance instruction" button — useful for interactive tuning before confirming. Terminal artifact only; don't replace `dashboard.md`.

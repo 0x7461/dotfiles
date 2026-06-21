@@ -4,7 +4,7 @@ Monthly tactical cadence — ~5 min. Routes surplus to the underweight bucket. N
 
 ## 1. Load context
 
-Read `dashboard.md` and `log.md` in parallel.
+Read `dashboard.md`, `log.md`, and `budget.md` in parallel.
 
 ## 2. Generated Knowledge — state the frame
 
@@ -31,6 +31,14 @@ Template:
 - **Cash in:** salary TBA (leave TBA unless user provides it).
 - **Cash out:** estimate from known recurring (rent 1.5, tontine 5.0, subs ~1.0) + ask for actual living/travel expenses.
 - **Actions:** any trades placed this month — ask if not clear.
+
+### Give every dollar a job (YNAB-lite)
+
+Before routing surplus, reconcile income against `budget.md`'s Monthly Jobs:
+assign Cash in across fixed bills + sink funds + living, and **the residual is the
+investable surplus** — never size the surplus first. If a category overspent,
+note that it was covered from another (roll with the punches), don't silently
+absorb it into the surplus. The residual then feeds the bucket-routing step below.
 - **Next month:** suggest based on the most underweight bucket from step 2. Name the specific fund (consult `funds.md` for bucket → fund mapping and platform availability).
 - **Notes:** context, one-offs, Korea session status if applicable.
 
