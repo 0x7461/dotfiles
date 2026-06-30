@@ -28,6 +28,9 @@
     "diagnostics": true,
     "metrics": false
   },
+  // Zed installed via Void xbps (root-owned /usr/lib/zed); self-updater can't
+  // apply updates and wedges a headless instance. Manage updates via xbps only.
+  "auto_update": false,
   "vim_mode": true,
   "icon_theme": "Zed (Default)",
   "ui_font_size": 16,
