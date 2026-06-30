@@ -127,7 +127,8 @@ binds {
     Mod+C       { close-window; }
     Mod+V       { toggle-window-floating; }
     Mod+Return  { spawn "ghostty"; }
-    Mod+Shift+Return { spawn "alacritty"; }
+    Mod+Shift+Return { spawn "foot"; }  // break-glass + tmux/persistence terminal (#79, replaced alacritty)
+    Mod+Grave   { spawn "sh" "-c" "export SCRATCH_TERM=1; exec ghostty --gtk-single-instance=false --class=com.ghostty.scratch"; }  // floating scratch terminal (#79); SCRATCH_TERM suppresses fish greeting; close with Mod+C
     Mod+D       { spawn "sh" "-c" "pkill fuzzel || fuzzel"; }  // launcher — fuzzel (install: sudo xbps-install -S fuzzel)
     Mod+Shift+Q { spawn "power-menu"; }
     Mod+Shift+E { quit skip-confirmation=true; }  // direct-exit fallback
@@ -173,8 +174,9 @@ binds {
     Mod+Shift+9 { move-column-to-workspace 9; }
     Mod+Shift+0 { move-column-to-workspace 10; }
 
-    // Mod+S / Mod+Shift+S — Hyprland scratchpad has no niri equivalent.
-    // Park unbound; revisit with a floating-window toggle script if missed.
+    // Mod+S / Mod+Shift+S — Hyprland toggle-hide scratchpad has no niri equivalent
+    // (niri lacks window-hide + global shortcuts). Closest fit: the Mod+Grave floating
+    // scratch terminal above — spawn-floating for one-off use, not toggle-hide. See IDEAS #79.
 
     // Multimedia keys — same wpctl/brightnessctl/wob commands as Hyprland.
     XF86AudioRaiseVolume allow-when-locked=true { spawn "sh" "-c" "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+; timeout 0.1 bash -c 'wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk \"{printf \\\"%d\\\\n\\\", \\$2*100}\" > $XDG_RUNTIME_DIR/wob-vol.sock'"; }
@@ -217,7 +219,7 @@ window-rule {
 // Terminals: open at full column width (visual parity with how firefox feels)
 window-rule {
     match app-id="com.mitchellh.ghostty"
-    match app-id="Alacritty"
+    match app-id="foot"
     default-column-width { proportion 1.0; }
 }
 
@@ -236,6 +238,29 @@ window-rule {
 window-rule {
     match app-id=r#"^(Firefox|firefox)$"# title="^Extension:"
     open-floating true
+}
+
+// Picture-in-Picture (#67): browser PiP gets tiled by default — force it floating.
+// NOTE: this floats it above tiled windows ON ITS WORKSPACE only. niri has no native
+// cross-workspace "always on top" (each workspace owns its floating layer); for the
+// "follow me across workspaces" behaviour run the niri-float-sticky daemon (see #67).
+window-rule {
+    match title="^Picture-in-Picture$"
+    open-floating true
+    default-column-width { fixed 480; }
+    default-window-height { fixed 270; }
+    default-floating-position x=32 y=32 relative-to="bottom-right"
+}
+
+// Floating scratch terminal (#79): Mod+Grave → ghostty --class=com.ghostty.scratch,
+// for one-off throwaway use (calc/notes). Spawn → use → Mod+C to close. Not a
+// toggle-hide dropdown (niri lacks global shortcuts — see IDEAS #79).
+window-rule {
+    match app-id=r#"^com\.ghostty\.scratch$"#
+    open-floating true
+    default-column-width { fixed 1200; }
+    default-window-height { fixed 540; }
+    default-floating-position x=0 y=64 relative-to="top"
 }
 
 // Idle inhibit for fullscreen video: handled by mpv/Firefox via the

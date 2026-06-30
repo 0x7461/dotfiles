@@ -25,6 +25,10 @@ choice=$(printf '%s\n' \
   "Focus last column              | focus-column-last" \
   "Consume window left            | consume-or-expel-window-left" \
   "Consume window right           | consume-or-expel-window-right" \
+  "Move column left               | move-column-left" \
+  "Move column right              | move-column-right" \
+  "Swap window left               | swap-window-left" \
+  "Swap window right              | swap-window-right" \
   "Move column to monitor left    | move-column-to-monitor-left" \
   "Move column to monitor right   | move-column-to-monitor-right" \
   "Power off monitors             | power-off-monitors" \
@@ -32,7 +36,7 @@ choice=$(printf '%s\n' \
   "Reload config                  | load-config-file" \
   "Show hotkey overlay            | show-hotkey-overlay" \
   "Quit niri                      | quit --skip-confirmation" \
-  | fuzzel --dmenu --prompt "niri " --lines 15)
+  | fuzzel --dmenu --prompt "niri " --width 65 --lines 20)
 
 [ -z "$choice" ] && exit 0
 

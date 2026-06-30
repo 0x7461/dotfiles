@@ -1,4 +1,9 @@
 function fish_greeting
+    # no greeting in the niri scratch terminal (#79)
+    if set -q SCRATCH_TERM
+        return
+    end
+
     set -l cow (fortune -s | iconv -c -f UTF-8 -t ASCII//TRANSLIT | cowsay)
     # find the widest line to right-align as a block
     set -l max_width 0

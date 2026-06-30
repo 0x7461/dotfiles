@@ -1,7 +1,7 @@
 if status is-interactive
 	# environment variables
 	set -x EDITOR nvim
-	set -x TERMINAL alacritty
+	set -x TERMINAL foot
 
 	# starship prompt
 	starship init fish | source
