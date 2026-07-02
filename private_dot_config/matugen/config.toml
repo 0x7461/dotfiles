@@ -1,0 +1,17 @@
+# matugen config — accent-only theming (#74)
+# Usage:
+#   matugen image ~/.wallpapers/monochrome.png -t scheme-neutral    # wallpaper-fitting gray
+#   matugen image ~/.wallpapers/monochrome.png -t scheme-monochrome # pure e-ink gray
+#   matugen color hex '#8aadf4' -t scheme-tonal-spot                # seed-color mode
+# After a run: niri msg action load-config-file (if post_hook below didn't fire it)
+
+[config]
+
+[templates.niri-accent]
+input_path = "~/.config/matugen/templates/niri-accent.kdl"
+output_path = "~/.config/niri/accent.kdl"
+post_hook = "niri msg action load-config-file"
+
+[templates.fuzzel-accent]
+input_path = "~/.config/matugen/templates/fuzzel-accent.ini"
+output_path = "~/.config/fuzzel/accent-colors.ini"
