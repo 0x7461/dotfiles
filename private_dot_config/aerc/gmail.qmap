@@ -1,0 +1,12 @@
+# aerc sidebar -> notmuch queries. Folder-based (accurate): notmuch's initial
+# import stamps tag:inbox on ALL mail, so tag:inbox is meaningless here. Real
+# Gmail inbox/labels are preserved as Maildir folders instead.
+Inbox=folder:"gmail/Inbox"
+Unread=tag:unread
+Sent=folder:"gmail/[Gmail]/Sent Mail"
+Banking=folder:"gmail/Banking"
+Security=folder:"gmail/Credential and security"
+Purchases=folder:"gmail/Online Purchase"
+Works=folder:"gmail/Works"
+Spam=folder:"gmail/[Gmail]/Spam"
+All=*

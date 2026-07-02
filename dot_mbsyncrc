@@ -1,0 +1,27 @@
+# mbsync (isync) — Gmail → local Maildir mirror. Phase 1 of #46 (archive-only).
+# Password lives in a 600 file (never in git/chezmoi); paste it from Proton Pass.
+
+IMAPAccount gmail
+Host imap.gmail.com
+User im.bitter.smiles@gmail.com
+PassCmd "cat ~/.config/mbsync/gmail.pass"
+TLSType IMAPS
+CertificateFile /etc/ssl/certs/ca-certificates.crt
+
+IMAPStore gmail-remote
+Account gmail
+
+MaildirStore gmail-local
+Path ~/mail/gmail/
+Inbox ~/mail/gmail/Inbox
+SubFolders Verbatim
+
+Channel gmail
+Far :gmail-remote:
+Near :gmail-local:
+# Skip [Gmail]/All Mail — it holds a *copy* of every message, so pulling it
+# doubles the archive. Also skip the virtual Important/Starred labels.
+Patterns * !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred"
+Create Near
+Expunge None          # archive-only: never delete anything server-side
+SyncState *

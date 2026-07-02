@@ -1,0 +1,17 @@
+#!/bin/sh
+# STAGED runit run-script for periodic Gmail sync (#46 Phase 1).
+# Not under ~/service yet — activate ONLY after the first manual `mbsync -a`
+# + `notmuch new` succeed (see the activation snippet in the runbook).
+#
+# Activate:
+#   mkdir -p ~/service/mbsync
+#   cp ~/.config/mbsync/mbsync.run ~/service/mbsync/run
+#   chmod +x ~/service/mbsync/run
+#   # runsv auto-discovers it and starts syncing every 15 min.
+#   # Pause with:  SVDIR=~/service sv down mbsync
+
+exec 2>&1
+while true; do
+    mbsync -a && notmuch new
+    sleep 900
+done
