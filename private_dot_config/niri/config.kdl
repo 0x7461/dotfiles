@@ -91,7 +91,8 @@ hotkey-overlay {
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 // Autostart — mirror of ~/.config/hypr/hyprland.d/autostarts.conf.
-spawn-at-startup "swaybg" "-i" "/home/ta/.wallpapers/monochrome.png"
+// #74: `current` symlink is the wallpaper source of truth — switch via `wallpaper-theme`
+spawn-at-startup "swaybg" "-i" "/home/ta/.wallpapers/current"
 // PipeWire/wireplumber/pipewire-pulse are now supervised by runit (~/service/),
 // independent of compositor lifetime. start-sound.sh removed from autostart.
 spawn-at-startup "/usr/libexec/polkit-gnome-authentication-agent-1"

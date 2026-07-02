@@ -15,3 +15,23 @@ post_hook = "niri msg action load-config-file"
 [templates.fuzzel-accent]
 input_path = "~/.config/matugen/templates/fuzzel-accent.ini"
 output_path = "~/.config/fuzzel/accent-colors.ini"
+
+[templates.tmux-theme]
+input_path = "~/.config/matugen/templates/tmux-theme.conf"
+output_path = "~/.config/tmux/matugen.conf"
+post_hook = "tmux source-file ~/.config/tmux/matugen.conf || true"
+
+[templates.ghostty-theme]
+input_path = "~/.config/matugen/templates/ghostty-theme.conf"
+output_path = "~/.config/ghostty/matugen-theme.conf"
+# no reload hook: ghostty has no auto-reload/signal — new windows or ctrl+shift+,
+
+[templates.foot-theme]
+input_path = "~/.config/matugen/templates/foot-theme.ini"
+output_path = "~/.config/foot/matugen-colors.ini"
+# no reload hook: foot reads config at startup — applies to new windows
+
+[templates.hyprlock-theme]
+input_path = "~/.config/matugen/templates/hyprlock-theme.conf"
+output_path = "~/.config/hypr/hyprlock.d/matugen.conf"
+# no reload hook: hyprlock reads config when a lock starts

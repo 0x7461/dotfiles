@@ -4,6 +4,7 @@
 # Each line: "<human label> | <niri msg action args>"
 # Selected line's action is passed to `niri msg action` via sh -c so quoted
 # args (e.g. set-column-width "100%") get word-split correctly.
+# Actions prefixed with `!` run as plain shell commands instead.
 #
 # Bound to Mod+Semicolon in ~/.config/niri/config.kdl.
 
@@ -33,6 +34,8 @@ choice=$(printf '%s\n' \
   "Move column to monitor right   | move-column-to-monitor-right" \
   "Power off monitors             | power-off-monitors" \
   "Power on monitors              | power-on-monitors" \
+  "Wallpaper: pick + adapt theme  | !wallpaper-theme --pick" \
+  "Theme: re-adapt to wallpaper   | !wallpaper-theme --readapt" \
   "Reload config                  | load-config-file" \
   "Show hotkey overlay            | show-hotkey-overlay" \
   "Quit niri                      | quit --skip-confirmation" \
@@ -43,5 +46,9 @@ choice=$(printf '%s\n' \
 # Strip the label, keep only the action+args after the pipe
 action=$(printf '%s' "$choice" | sed 's/^[^|]*|[[:space:]]*//')
 
-# Word-split via sh -c so quoted args parse as separate argv
-sh -c "niri msg action $action"
+# `!`-prefixed entries are shell commands; everything else is a niri action.
+# Word-split via sh -c so quoted args parse as separate argv.
+case "$action" in
+  !*) sh -c "${action#!}" ;;
+  *)  sh -c "niri msg action $action" ;;
+esac

@@ -1,0 +1,55 @@
+#!/bin/sh
+# #74: one entrypoint owns wallpaper + theme so they can't drift.
+#
+# usage:
+#   wallpaper-theme <image>          set wallpaper + regenerate theme
+#   wallpaper-theme --readapt        regenerate theme from current wallpaper
+#   wallpaper-theme --pick           fuzzel picker over ~/.wallpapers
+#   wallpaper-theme --scheme <type>  persist matugen scheme type, then readapt
+#
+# Scheme persists in ~/.config/matugen/scheme (default scheme-neutral).
+# ~/.wallpapers/current (symlink) is the single source of truth: niri's
+# spawn-at-startup swaybg and hyprlock's background both point at it.
+
+WALLS="$HOME/.wallpapers"
+CURRENT="$WALLS/current"
+SCHEME_FILE="$HOME/.config/matugen/scheme"
+scheme=$(cat "$SCHEME_FILE" 2>/dev/null || echo scheme-neutral)
+
+# matugen's niri reload hook needs the socket (absent in SSH shells)
+[ -z "$NIRI_SOCKET" ] && NIRI_SOCKET=$(ls /run/user/"$(id -u)"/niri.*.sock 2>/dev/null | head -1) && export NIRI_SOCKET
+
+case "$1" in
+  --pick)
+    img=$(find "$WALLS" -maxdepth 1 \( -type f -o -type l \) ! -name current \
+      \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.webp' \) -printf '%f\n' \
+      | sort | fuzzel --dmenu --prompt "wallpaper ")
+    [ -z "$img" ] && exit 0
+    set -- "$WALLS/$img"
+    ;;
+  --readapt)
+    set --
+    ;;
+  --scheme)
+    [ -n "$2" ] || { echo "usage: wallpaper-theme --scheme <scheme-type>" >&2; exit 1; }
+    echo "$2" > "$SCHEME_FILE"
+    scheme=$2
+    set --
+    ;;
+  ''|-*)
+    echo "usage: wallpaper-theme <image> | --readapt | --pick | --scheme <type>" >&2
+    exit 1
+    ;;
+esac
+
+if [ -n "$1" ]; then
+  [ -f "$1" ] || { echo "no such file: $1" >&2; exit 1; }
+  ln -sf "$(realpath "$1")" "$CURRENT"
+  pkill -x swaybg 2>/dev/null
+  setsid swaybg -i "$CURRENT" >/dev/null 2>&1 &
+fi
+
+[ -e "$CURRENT" ] || { echo "no current wallpaper ($CURRENT missing) — run: wallpaper-theme <image>" >&2; exit 1; }
+# matugen sniffs image format by extension — feed it the resolved target,
+# not the extensionless symlink (swaybg/hyprlock read content, matugen doesn't)
+exec matugen image "$(realpath "$CURRENT")" -t "$scheme" --prefer saturation -m dark
