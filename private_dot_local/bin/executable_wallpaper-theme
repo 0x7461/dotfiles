@@ -4,14 +4,14 @@
 # usage:
 #   wallpaper-theme <image>          set wallpaper + regenerate theme
 #   wallpaper-theme --readapt        regenerate theme from current wallpaper
-#   wallpaper-theme --pick           fuzzel picker over ~/.wallpapers
+#   wallpaper-theme --pick           fuzzel picker over ~/.theme/wallpaper
 #   wallpaper-theme --scheme <type>  persist matugen scheme type, then readapt
 #
 # Scheme persists in ~/.config/matugen/scheme (default scheme-neutral).
-# ~/.wallpapers/current (symlink) is the single source of truth: niri's
+# ~/.theme/wallpaper/current (symlink) is the single source of truth: niri's
 # spawn-at-startup swaybg and hyprlock's background both point at it.
 
-WALLS="$HOME/.wallpapers"
+WALLS="$HOME/.theme/wallpaper"
 CURRENT="$WALLS/current"
 SCHEME_FILE="$HOME/.config/matugen/scheme"
 scheme=$(cat "$SCHEME_FILE" 2>/dev/null || echo scheme-neutral)

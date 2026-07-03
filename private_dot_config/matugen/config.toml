@@ -1,37 +1,36 @@
-# matugen config — accent-only theming (#74)
-# Usage:
-#   matugen image ~/.wallpapers/monochrome.png -t scheme-neutral    # wallpaper-fitting gray
-#   matugen image ~/.wallpapers/monochrome.png -t scheme-monochrome # pure e-ink gray
-#   matugen color hex '#8aadf4' -t scheme-tonal-spot                # seed-color mode
-# After a run: niri msg action load-config-file (if post_hook below didn't fire it)
+# matugen config — wallpaper-driven theming (#74)
+# Canonical entrypoint: `wallpaper-theme` (set image / --pick / --readapt / --scheme).
+# Raw run: matugen image ~/.theme/wallpaper/monochrome.png -t scheme-neutral --prefer saturation -m dark
+# Outputs land in ~/.theme/<app>/ (chezmoi-tracked = the universal fallback);
+# templates live here in ./templates/ and are hand-written.
 
 [config]
 
 [templates.niri-accent]
 input_path = "~/.config/matugen/templates/niri-accent.kdl"
-output_path = "~/.config/niri/accent.kdl"
+output_path = "~/.theme/niri/accent.kdl"
 post_hook = "niri msg action load-config-file"
 
 [templates.fuzzel-accent]
 input_path = "~/.config/matugen/templates/fuzzel-accent.ini"
-output_path = "~/.config/fuzzel/accent-colors.ini"
+output_path = "~/.theme/fuzzel/colors.ini"
 
 [templates.tmux-theme]
 input_path = "~/.config/matugen/templates/tmux-theme.conf"
-output_path = "~/.config/tmux/matugen.conf"
-post_hook = "tmux source-file ~/.config/tmux/matugen.conf || true"
+output_path = "~/.theme/tmux/theme.conf"
+post_hook = "tmux source-file ~/.theme/tmux/theme.conf || true"
 
 [templates.ghostty-theme]
 input_path = "~/.config/matugen/templates/ghostty-theme.conf"
-output_path = "~/.config/ghostty/matugen-theme.conf"
+output_path = "~/.theme/ghostty/theme.conf"
 # no reload hook: ghostty has no auto-reload/signal — new windows or ctrl+shift+,
 
 [templates.foot-theme]
 input_path = "~/.config/matugen/templates/foot-theme.ini"
-output_path = "~/.config/foot/matugen-colors.ini"
+output_path = "~/.theme/foot/colors.ini"
 # no reload hook: foot reads config at startup — applies to new windows
 
 [templates.hyprlock-theme]
 input_path = "~/.config/matugen/templates/hyprlock-theme.conf"
-output_path = "~/.config/hypr/hyprlock.d/matugen.conf"
+output_path = "~/.theme/hyprlock/vars.conf"
 # no reload hook: hyprlock reads config when a lock starts
