@@ -50,13 +50,31 @@ if [ -n "$1" ]; then
 fi
 
 [ -e "$CURRENT" ] || { echo "no current wallpaper ($CURRENT missing) — run: wallpaper-theme <image>" >&2; exit 1; }
+img=$(realpath "$CURRENT")
+
+# Colorless-wallpaper detection (#74): dry-run matugen with a sentinel fallback.
+# Extraction never returns an achromatic color, so seeing the sentinel back
+# means "no extractable color" -> force scheme-neutral for THIS run (gray
+# wallpaper -> gray theme) instead of theming from matugen's vendor fallback
+# seed (#4285f4). Persisted scheme is untouched: colorful wallpapers still
+# get it automatically.
+SENTINEL='#010101'
+probe=$(matugen image "$img" --fallback-color "$SENTINEL" --prefer saturation --dry-run --json hex -m dark -q 2>/dev/null \
+  | jq -r '.colors.source_color.dark.color' 2>/dev/null)
+case "$probe" in
+  "$SENTINEL")
+    echo "wallpaper has no extractable color -> using scheme-neutral for this run (persisted: $scheme)" >&2
+    scheme=scheme-neutral ;;
+  '')
+    echo "warn: color probe failed (matugen/jq); proceeding with $scheme" >&2 ;;
+esac
 
 # Lockscreen label styling by wallpaper luminance (#74): dark text + white halo
 # on light wallpapers, light text + dark halo (subtitle-style) on dark ones.
 # Variant color values come from vars.conf ($label*On{Light,Dark}, matugen-generated).
 # -alpha off is load-bearing: fx:mean averages an alpha channel in, so an
 # opaque black PNG would read ~0.5 and misclassify as light
-lum=$(magick "$(realpath "$CURRENT")" -alpha off -resize 64x64! -colorspace gray -format '%[fx:mean]' info: 2>/dev/null)
+lum=$(magick "$img" -alpha off -resize 64x64! -colorspace gray -format '%[fx:mean]' info: 2>/dev/null)
 case "$lum" in
   '') echo "warn: luminance probe failed (magick); keeping existing labels.conf" >&2 ;;
   *)
@@ -75,4 +93,4 @@ esac
 
 # matugen sniffs image format by extension — feed it the resolved target,
 # not the extensionless symlink (swaybg/hyprlock read content, matugen doesn't)
-exec matugen image "$(realpath "$CURRENT")" -t "$scheme" --prefer saturation -m dark
+exec matugen image "$img" -t "$scheme" --prefer saturation -m dark
