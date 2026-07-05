@@ -75,7 +75,7 @@
 **Evidence as exit step:** Every implementation task ends with verifiable evidence — file path, test output, working command, or a concrete artifact. "Done" without evidence is incomplete. If the work can't be verified (e.g. UI feature, no test runner), say so explicitly rather than implying success.
 
 **Escalate when struggling — don't grind silently.** Name the obstacle in one sentence, then suggest:
-- Stronger model — if on Sonnet/Haiku/Fast, recommend switching to Opus 4.7
+- Stronger model — if on Sonnet/Haiku/Fast, recommend switching to Opus 4.8 / Fable 5
 - Higher effort — if a skill or session lowered effort below default high, recommend bumping back
 - Fresh session — if context is muddied or off-track
 - Warn if the task is shaping up to need 20+ tool calls.

@@ -3,8 +3,8 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-05-30
-**Last CC cleanup:** 2026-05-24
+**Last reviewed:** 2026-07-04 (all sections verified against current reality; no structural changes needed)
+**Last CC cleanup:** 2026-07-05
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
@@ -97,6 +97,18 @@ Only runs if `/run/media/ta/T7 Shield/` is mounted. Skip silently if not.
   ```sh
   find "/run/media/ta/T7 Shield/_meta" -maxdepth 1 -type d -name '*-backup-*' -mtime +14 2>/dev/null
   ```
+
+## Trash bins (monthly)
+
+Review then empty — never empty unseen. `gio trash --empty` purges ALL trashes at once (home + every mounted drive), so list contents first:
+
+```sh
+gio list trash:// 2>/dev/null
+du -sh ~/.local/share/Trash "/run/media/ta/T7 Shield/.Trash-1000" 2>/dev/null
+```
+
+- [ ] Surface contents + sizes for a keep/purge decision (user runs the empty command themselves).
+- Last emptied: never (bins in use since 2026-07; ~11.1 GB parked on T7 as of 2026-07-05)
 
 ## Checklist self-revision triggers
 
