@@ -1,0 +1,84 @@
+#!/bin/sh
+# bellman: early warning for the Dell EC/USB-C PD wedge (GPE 6E storm -> fan
+# storm -> hard freeze; see memory reference_dell_ec_gpe6e_crash).
+exec 2>&1
+
+NTFY_URL="https://ntfy.sh/0x7461-system-vbjxeqflaqmtkgvtj8ss"
+GPE=/sys/firmware/acpi/interrupts/gpe6E
+INTERVAL=60
+GPE_DELTA_ALERT=1000      # per interval; baseline ~8/min, one PD flap = +5k
+FAN_ALERT=4000            # rpm
+FAN_TEMP_CEIL=60000       # millideg; high fan below this = EC failsafe curve
+FAN_STREAK_ALERT=3        # consecutive samples
+BOOT_GRACE=600            # s; boot gpe burst + fan ramp are normal
+COOLDOWN=1800             # s per condition
+BAT=/sys/class/power_supply/BAT0/capacity
+ACON=/sys/class/power_supply/AC/online
+
+for d in /sys/class/hwmon/hwmon*; do
+    case "$(cat "$d/name")" in
+        dell_smm) FAN1=$d/fan1_input; FAN2=$d/fan2_input ;;
+        coretemp) TEMP=$d/temp1_input ;;
+    esac
+done
+if [ ! -r "$GPE" ] || [ ! -r "${FAN1:-/nonexistent}" ] || [ ! -r "${TEMP:-/nonexistent}" ] \
+    || [ ! -r "$BAT" ] || [ ! -r "$ACON" ]; then
+    echo "ERROR: missing sysfs source (gpe=$GPE fan=$FAN1 temp=$TEMP bat=$BAT ac=$ACON); retrying in ${INTERVAL}s"
+    sleep $INTERVAL
+    exit 1
+fi
+
+notify() { # $1 title, $2 body, $3 priority (default high), $4 tags (default rotating_light)
+    curl -fsS -m 10 -H "Title: bellman: $1" -H "Priority: ${3:-high}" -H "Tags: ${4:-rotating_light}" \
+        -d "$2" "$NTFY_URL" >/dev/null || echo "ERROR: ntfy push failed: $1"
+}
+
+prev=$(cat "$GPE" | awk '{print $1}')
+fan_streak=0
+last_gpe_alert=0
+last_fan_alert=0
+warned20=0; warned10=0; warned5=0
+
+while :; do
+    sleep $INTERVAL
+    now=$(cut -d. -f1 /proc/uptime)
+    cur=$(awk '{print $1}' "$GPE")
+    delta=$((cur - prev))
+    prev=$cur
+    fan1=$(cat "$FAN1"); fan2=$(cat "$FAN2"); temp=$(cat "$TEMP")
+    cap=$(cat "$BAT"); ac=$(cat "$ACON")
+    echo "gpe6E=$cur delta=$delta fan=$fan1/$fan2 temp=$((temp / 1000))C bat=${cap}% ac=$ac"
+
+    # battery warnings: once per threshold per discharge episode; not boot-gated
+    if [ "$ac" -eq 1 ]; then
+        warned20=0; warned10=0; warned5=0
+    elif [ "$cap" -le 5 ] && [ "$warned5" -eq 0 ]; then
+        warned5=1; warned10=1; warned20=1
+        notify "Battery ${cap}%" "Critically low — connect the charger NOW." urgent battery
+    elif [ "$cap" -le 10 ] && [ "$warned10" -eq 0 ]; then
+        warned10=1; warned20=1
+        notify "Battery ${cap}%" "Very low — connect the charger soon." high battery
+    elif [ "$cap" -le 20 ] && [ "$warned20" -eq 0 ]; then
+        warned20=1
+        notify "Battery ${cap}%" "Running low — connect the charger." default battery
+    fi
+
+    if [ "$fan1" -ge $FAN_ALERT ] && [ "$temp" -lt $FAN_TEMP_CEIL ]; then
+        fan_streak=$((fan_streak + 1))
+    else
+        fan_streak=0
+    fi
+
+    [ "$now" -lt $BOOT_GRACE ] && continue
+
+    if [ "$delta" -ge $GPE_DELTA_ALERT ] && [ $((now - last_gpe_alert)) -ge $COOLDOWN ]; then
+        last_gpe_alert=$now
+        notify "EC interrupt storm" \
+            "gpe6E +$delta/min (baseline ~8) — USB-C PD flapping. UNPLUG THE CHARGER and run on battery to stop the storm; reseat/swap it before replugging. If fans then ramp at idle, EC is wedged: shut down, unplug AC, hold power 30s (flea-power reset)."
+    fi
+    if [ "$fan_streak" -ge $FAN_STREAK_ALERT ] && [ $((now - last_fan_alert)) -ge $COOLDOWN ]; then
+        last_fan_alert=$now
+        notify "Fan storm at low temp" \
+            "fans $fan1/$fan2 rpm at $((temp / 1000))C for ${fan_streak}m — EC failsafe curve, EC wedged; freeze imminent. Save work now, then: shut down, unplug AC, hold power button 30s (flea-power reset), boot."
+    fi
+done
