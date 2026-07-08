@@ -17,4 +17,5 @@ palette = 14=#70ced8
 config-file = /home/ta/.theme/ghostty/theme.conf
 font-family = Iosevka Term
 font-size = 12
+cursor-style-blink = false
 env = USE_TMUX=0
