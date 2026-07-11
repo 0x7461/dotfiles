@@ -8,6 +8,11 @@ if status is-interactive
 
 	# load scripts and executables from .local/bin into PATH
 	set -gx PATH $PATH $HOME/.local/bin
+
+	# GitHub SSH key: load once per agent lifetime instead of retyping ssh-add
+	if not ssh-add -l 2>/dev/null | grep -q id_ed25519_gh
+		ssh-add ~/.ssh/id_ed25519_gh
+	end
 end
 
 # proto
