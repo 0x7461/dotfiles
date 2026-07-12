@@ -11,6 +11,8 @@
       {"name": "Ars Technica",    "url": "https://feeds.arstechnica.com/arstechnica/index", "max_items": 10},
       {"name": "PetaPixel",       "url": "https://petapixel.com/feed/",                  "max_items": 10},
       {"name": "GSMArena",        "url": "https://www.gsmarena.com/rss-news-reviews.php3", "max_items": 10},
+      {"name": "Bubbles Hot",     "url": "https://bubbles.town/feed/hot",                "max_items": 10},
+      {"name": "Damn Interesting", "url": "https://feeds.feedburner.com/damninteresting/all", "max_items": 5, "skip_curate": true},
       {"name": "Dan Luu",         "url": "https://danluu.com/atom.xml",                  "max_items": 5,  "skip_curate": true},
       {"name": "Julia Evans",     "url": "https://jvns.ca/atom.xml",                     "max_items": 5,  "skip_curate": true},
       {"name": "マリウス",         "url": "https://マリウス.com/index.xml",                 "max_items": 5,  "skip_curate": true}
