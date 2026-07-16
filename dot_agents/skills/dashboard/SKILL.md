@@ -100,11 +100,14 @@ for line in open('/home/ta/projects/IDEAS.md'):
             else "Research" if s.startswith("Research")
             else "Idea (PLAN drafted)" if s.startswith("Idea") and "PLAN.md written" in s
             else None)
-    if bucket: print(f"  #{num}  {bucket:<22}  {title}")
+    # Print the FULL status, not just the bucket — qualifiers after the em-dash change the
+    # meaning entirely ("Research — ready to purchase" is done research, not open work;
+    # missed exactly this way 2026-07-18).
+    if bucket: print(f"  #{num}  {s[:44]:<44}  {title}")
 PY
 ```
 
-Reports each non-Maintain/Done/Archived entry. Sort or group by bucket in presentation. Exclusions are deliberate:
+Reports each non-Maintain/Done/Archived entry with its full status string — read the qualifier after the em-dash before treating an entry as open work (e.g. "Research — ready to purchase" means the research is finished and only a user action remains). Sort or group by status prefix in presentation. Exclusions are deliberate:
 - **Maintain** — already shipped, not "open work."
 - **Done / Archived** — closed.
 - **Idea (no PLAN.md)** — too many; would flood output. Surface count only.
