@@ -1,0 +1,10 @@
+{
+  "lastChangelogVersion": "0.80.10",
+  "theme": "dark",
+  "defaultProvider": "ollama",
+  "defaultModel": "gemma4:e2b",
+  "defaultThinkingLevel": "medium",
+  "packages": [
+    "npm:pi-mcp-extension"
+  ]
+}

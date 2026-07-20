@@ -1,0 +1,33 @@
+{
+  "providers": {
+    "deepseek": {
+      "baseUrl": "https://api.deepseek.com",
+      "api": "openai-completions",
+      "apiKey": "!tr -d '[:space:]' < /home/ta/.config/deepseek/key",
+      "models": [
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000
+        }
+      ]
+    },
+    "ollama": {
+      "baseUrl": "http://localhost:11434/v1",
+      "api": "openai-completions",
+      "apiKey": "ollama",
+      "models": [
+        { "id": "gemma4:e2b", "name": "Gemma4 e2b (local)" },
+        { "id": "gemma4:e4b", "name": "Gemma4 e4b (local)" }
+      ]
+    }
+  }
+}

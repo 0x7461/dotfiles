@@ -1,0 +1,19 @@
+{
+  "settings": {
+    "requestTimeoutMs": 120000
+  },
+  "mcpServers": {
+    "agent-browser": {
+      "transport": "stdio",
+      "command": "/home/ta/.proto/shims/uv",
+      "args": ["run", "--project", "/home/ta/projects/agent-browser", "agent-browser-mcp"],
+      "lifecycle": "eager"
+    },
+    "hindsight": {
+      "transport": "stdio",
+      "command": "/home/ta/.proto/shims/uv",
+      "args": ["run", "--project", "/home/ta/projects/hindsight", "python", "/home/ta/projects/hindsight/server.py"],
+      "lifecycle": "eager"
+    }
+  }
+}
