@@ -2,8 +2,8 @@
 # Valid display variants: "city", "coordinates", "mixed"
 
 [location]
-latitude = 37.5660
-longitude = 126.9784
+latitude = 21.0278
+longitude = 105.8342
 city_name_language = "en"
 display = "city"
 
