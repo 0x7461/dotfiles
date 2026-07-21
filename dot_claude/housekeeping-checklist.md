@@ -80,6 +80,10 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   - Cross-project rules → CLAUDE.md
 - [ ] No session-specific context saved to durable docs
 - [ ] MEMORY.md still under 200 lines
+- [ ] **Glossary upkeep (#56)** — did this session coin/use a new shared-vocabulary term (project codename, tool shorthand, recurring abbreviation, or a person/place alias)? Offer to add it, routing by sensitivity:
+  - **Public** (codenames, tools, abbrevs) → `~/obsidian-vault/system/glossary.md` (loads globally via the `~/.claude/rules/glossary.md` symlink; **public terms only** — its contents ship to whatever model backs the session)
+  - **PII** (people, places, real identities) → `~/.claude/pii-aliases.local.md` (local, un-synced — never put PII in the vault glossary)
+  - Also flag any glossary entry this session made **stale** (a retired/renamed project or tool still listed as current). Transcript-driven only — full-glossary sweeps aren't this checklist's job.
 
 ## T7 vault inbox sweep (run on housekeeping if T7 mounted)
 

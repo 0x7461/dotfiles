@@ -15,6 +15,7 @@
 - MEMORY.md: disposable scratchpad, 200-line hard truncation.
 - **No `project_*.md` files in memory.** Memory is for behavior + cross-project reference only. Project-specific content goes to that project's PLAN.md.
 - **No INSIGHTS.md / research.md / notes.md files anywhere.** They drift into stale shadow-docs. Deep internals: PLAN.md `## Internals` (narrative) or `agent_docs/<topic>.md` (imperative agent reference when AGENTS.md overflows). Per-project doc layout: see `## Documentation`.
+- **Glossary / aliases (#56):** public terms (codenames, tools, abbrevs) load globally via `~/.claude/rules/glossary.md` (→ synced vault `system/glossary.md`). **PII aliases** (people/places/real identities) live ONLY in local, un-synced `~/.claude/pii-aliases.local.md` — read it **on-demand** to resolve a real name/place, **only on private-tier models** (Anthropic/CC or local Ollama); **never read or surface it on DeepSeek/non-private backends** (they train on data), and never add it to chezmoi or the vault.
 
 ## Documentation
 - `~/projects/IDEAS.md` — project index (slim entries only)
