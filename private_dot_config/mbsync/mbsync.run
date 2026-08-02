@@ -1,17 +1,38 @@
 #!/bin/sh
-# STAGED runit run-script for periodic Gmail sync (#46 Phase 1).
-# Not under ~/service yet — activate ONLY after the first manual `mbsync -a`
-# + `notmuch new` succeed (see the activation snippet in the runbook).
+# runit run-script for periodic Gmail sync (#46 Phase 1).
+# Live under ~/service/mbsync since Phase 1 went live; this is the canonical copy.
 #
-# Activate:
+# (Re)install:
 #   mkdir -p ~/service/mbsync
 #   cp ~/.config/mbsync/mbsync.run ~/service/mbsync/run
 #   chmod +x ~/service/mbsync/run
+#   install -m 755 ~/projects/maint-watch/service-hooks/finish ~/service/mbsync/finish
 #   # runsv auto-discovers it and starts syncing every 15 min.
 #   # Pause with:  SVDIR=~/service sv down mbsync
+#
+# snooze, not an in-process `while … sleep` loop (converted 2026-08-02). snooze
+# runs the command once and exits, so runsv restarts per cycle and the `finish`
+# hook records each run's exit status. A loop that never exits can never fire
+# `finish`, so a sync failing every 15 minutes was completely invisible — new
+# mail would simply stop arriving with nothing to say so. maint-watch reported
+# it UNREPORTABLE.
+#
+# `sh -c` because the exit status must reflect both halves: a successful pull
+# followed by a failed reindex is still a failed run.
 
+# Every 6 hours (00:00 / 06:00 / 12:00 / 18:00). Was every 15 minutes, which the
+# initial backfill needed and steady state does not — mail is never more than 6h
+# stale for 1/24th of the work.
+#
+# `-t` gives catch-up: snooze records the last run, so a window missed because the
+# laptop was asleep fires on wake instead of being skipped until the next one.
+# That matters at this cadence — a skipped 15-minute window was nothing, a skipped
+# 6-hour window is most of a day. (See the late-boot gotcha in
+# ~/obsidian-vault/system/services.md.)
+#
+# **Verify any spec change with `snooze -v <spec> true` before installing.**
+# snooze defaults an *unspecified* field to 0, not "any": bare `-M/15` means
+# "every 15th minute of hour 0" and silently parks the service until midnight.
+# That happened here on 2026-08-02 and `sv status` still read `run` throughout.
 exec 2>&1
-while true; do
-    mbsync -a && notmuch new
-    sleep 900
-done
+exec snooze -t /tmp/mbsync.snooze -H/6 -M0 sh -c 'mbsync -a && notmuch new'
