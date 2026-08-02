@@ -1,0 +1,59 @@
+Host github.com
+    IdentityFile ~/.ssh/id_ed25519_gh
+    IdentitiesOnly yes
+
+{{/*
+   NAS network identifiers come from `chezmoi.toml [data]`, which is deliberately
+   NOT in chezmoi. github.com/0x7461/dotfiles is PUBLIC, and chezmoi's `private_`
+   prefix sets the applied file's mode (0600) -- it says nothing about repository
+   visibility. None of these values grant remote access (tailnet IPs are CGNAT,
+   the LAN IP is RFC1918, fe80:: is link-local), but the MAC and tailnet name are
+   durable device identifiers and don't belong in a public repo.
+   After a reinstall, re-enter them in chezmoi.toml or this file renders empty
+   HostNames and every `ssh nas` fails.
+*/ -}}
+# Tailnet IP: permanently assigned per device, so this survives DHCP moves on the
+# LAN (no router admin access for a reservation). Same-LAN traffic still goes direct
+# peer-to-peer, not via DERP. MagicDNS is off tailnet-wide, so the name
+# nas.{{ .nasTailnetName }} does not resolve -- use the IP.
+Host nas
+    HostName {{ .nasTailnetIP }}
+    User ta
+    IdentityFile ~/.ssh/id_ed25519_nas
+    IdentitiesOnly yes
+
+# Fallback 1: LAN IPv4. DHCP MOVES THIS -- it went .13 -> .30 on 2026-08-01 when the
+# box lost its lease during the SSD incident. Re-check before trusting it.
+Host nas-lan
+    HostName {{ .nasLanIP }}
+    User ta
+    IdentityFile ~/.ssh/id_ed25519_nas
+    IdentitiesOnly yes
+
+# Fallback 2 (the reliable one): IPv6 link-local. The kernel derives this from the
+# NIC's MAC ({{ .nasMac }}) by EUI-64 the moment the link comes up -- no DHCP, no
+# lease, no userspace daemon, no router. It cannot drift and it cannot expire.
+# Proved itself 2026-08-01: the SSD dropped off the bus, dhclient could not renew from
+# a dead disk, both IPv4 addresses vanished and the tailnet went with them -- this was
+# the only way back in.
+# CAVEAT 1: the %%wlp0s20f3 suffix is THIS laptop's interface, not the NAS's. Link-local
+# addresses are only meaningful per-link, so the scope must name the local interface
+# the NAS is reachable on. Using the USB ethernet adapter instead? Change the suffix
+# to that interface's name, or it will fail with "Invalid argument".
+# CAVEAT 2: the percent MUST be doubled here. ssh_config treats % as a token prefix
+# (%h, %p, ...), so a single one fails with "percent_expand: unknown key %w".
+Host nas-link-local
+    HostName {{ .nasLinkLocal }}%%wlp0s20f3
+    User ta
+    IdentityFile ~/.ssh/id_ed25519_nas
+    IdentitiesOnly yes
+
+# Give up after ~45s instead of hanging forever when the box stops answering mid-session
+# (as it did 2026-08-01 -- Ctrl-C does not help there, since it is sent to the far end;
+# the local escape is Enter then ~ then .).
+Host nas nas-lan nas-link-local
+    ServerAliveInterval 15
+    ServerAliveCountMax 3
+
+Host *
+    AddKeysToAgent yes
