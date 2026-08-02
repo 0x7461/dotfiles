@@ -3,7 +3,7 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-07-04 (all sections verified against current reality; no structural changes needed)
+**Last reviewed:** 2026-08-02 (service-changes section gained snooze-spec verification, finish-hook install, cadence declaration, and a real-run check — all driven by mistakes made that session)
 **Last CC cleanup:** 2026-07-05
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
@@ -32,8 +32,13 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   ```sh
   cm_dirty=$(chezmoi status 2>/dev/null | wc -l)
   if [ "$cm_dirty" -gt 0 ]; then
+    # NOTE: paths from `chezmoi status` are relative to $HOME — they MUST be prefixed, or
+    # `chezmoi diff` resolves nothing, returns empty, and every entry is silently misclassified
+    # as mode-only. That hid real content drift on 2026-07-30 (a ~/.ssh/config edit that the
+    # next `chezmoi apply` would have reverted). Always verify a suspect file directly:
+    #   chezmoi diff ~/.ssh/config
     cm_content=$(chezmoi status 2>/dev/null | while IFS= read -r ln; do
-      chezmoi diff "${ln:3}" 2>/dev/null | grep -q '^[-+][^-+]' && echo 1
+      chezmoi diff "$HOME/${ln:3}" 2>/dev/null | grep -q '^[-+][^-+]' && echo 1
     done | wc -l)
     cm_mode=$((cm_dirty - cm_content))
     echo "⚠ chezmoi: $cm_dirty drifted ($cm_content content, $cm_mode mode-only)"
@@ -60,10 +65,12 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 ## After service changes (runit)
 
 - [ ] Run script matches current binary/config paths
+- [ ] **snooze spec verified before install** — `snooze -v <spec> true` prints the next fire time. An unspecified field defaults to `0`, not "any", so `-M/15` means "every 15th minute *of hour 0*" and silently parks the service until midnight. Cost a parked `mbsync` on 2026-08-02; `sv status` read `run` the whole time.
+- [ ] **Scheduled (snooze) service has a `finish` hook** — `install -m 755 ~/projects/maint-watch/service-hooks/finish ~/service/<name>/finish`. Without it a job failing every run reads `OK`, because the supervised process is the scheduler, not the job.
 - [ ] Log directory exists (`log/main/` for svlogd)
-- [ ] Service actually running (`SVDIR=~/service sv status <name>`)
+- [ ] **Service actually *ran*, not just "is up"** — `sv status` reports the scheduler. Confirm a real outcome: `awk '!($1==-1 && $2==15)' ~/.cache/maint-watch/runs/<name>` (that filter drops `sv restart`s, which are recorded as SIGTERM and are not job runs).
 - [ ] .env file has all required vars
-- [ ] **`## Services` declaration** — if a project owns the service, its AGENTS.md `## Services` block declares it (`persistent` = up + survives reboot). Run `maint-watch doctor` to reconcile declared vs actual; a leftover `down` sentinel on a persistent service means it silently parks on the next reboot.
+- [ ] **`## Services` declaration** — if a project owns the service, its AGENTS.md `## Services` block declares it (`persistent` = up + survives reboot) **with a cadence** (`persistent, every 6h`) if it is scheduled; without one, a service that stops firing altogether reads `OK` forever. Declare the longest *normal* gap, not the nominal interval — a job running hourly but only 08:00–22:00 has a 10-hour legitimate overnight gap. Run `maint-watch doctor` to reconcile declared vs actual; a leftover `down` sentinel on a persistent service means it silently parks on the next reboot.
 
 ## After botkit changes
 
