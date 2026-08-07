@@ -71,6 +71,7 @@
 - **Read target file and related files before any edit.** Never edit from assumptions or memory alone.
 - No sycophantic openers or closing fluff. Terse by default.
 - Recommend starting a new session when switching to an unrelated task.
+- **Commands the user must run themselves** (sudo, interactive): tee output to a file in the session scratchpad (fish: `cmd &| tee $out/name.txt`) and read it. Tee, not plain redirect — silent commands look hung. Never ask them to paste long output back.
 - **Git commits:** commit proactively when a logical unit is done (completed feature/fix; before a rebase, feature-switch, or `/housekeeping`) — **don't wait to be asked.** Push only when asked; branch first if on the default branch. Trailer `Co-Authored-By: <model-code-name>` (e.g. `Opus`) — code name only, no version, no email.
 
 **Evidence as exit step:** Every implementation task ends with verifiable evidence — file path, test output, working command, or a concrete artifact. "Done" without evidence is incomplete. If the work can't be verified (e.g. UI feature, no test runner), say so explicitly rather than implying success.
