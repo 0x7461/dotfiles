@@ -22,8 +22,8 @@ Host nas
     IdentityFile ~/.ssh/id_ed25519_nas
     IdentitiesOnly yes
 
-# Fallback 1: LAN IPv4. DHCP MOVES THIS -- it went .13 -> .30 on 2026-08-01 when the
-# box lost its lease during the SSD incident. Re-check before trusting it.
+# Fallback 1: LAN IPv4. Static since 2026-08-07 -- set in /etc/network/interfaces on the
+# box (nas repo config/interfaces), so it no longer drifts. Was .13 -> .30 under DHCP.
 Host nas-lan
     HostName {{ .nasLanIP }}
     User ta
