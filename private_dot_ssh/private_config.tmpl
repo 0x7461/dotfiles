@@ -22,20 +22,35 @@ Host nas
     IdentityFile ~/.ssh/id_ed25519_nas
     IdentitiesOnly yes
 
-# Fallback 1: LAN IPv4. Static since 2026-08-07 -- set in /etc/network/interfaces on the
-# box (nas repo config/interfaces), so it no longer drifts. Was .13 -> .30 under DHCP.
+# Fallback 1: LAN IPv4. DHCP lease again as of 2026-08-10 -- the static config lived in
+# /etc/network/interfaces on the root SSD, which died, and the reinstall took a plain
+# lease (there is no router reservation; no admin access). So this CAN drift again.
+# History: .13 -> .30 (DHCP) -> .250 (static) -> .15 (DHCP).
+# If it stops answering, find the box by MAC: nmap -sn 192.168.1.0/24 then
+# `ip neigh | grep {{ .nasMac }}`. Prefer `nas` (tailnet) or nas-link-local.
 Host nas-lan
     HostName {{ .nasLanIP }}
     User ta
     IdentityFile ~/.ssh/id_ed25519_nas
     IdentitiesOnly yes
 
-# Fallback 2 (the reliable one): IPv6 link-local. The kernel derives this from the
-# NIC's MAC ({{ .nasMac }}) by EUI-64 the moment the link comes up -- no DHCP, no
-# lease, no userspace daemon, no router. It cannot drift and it cannot expire.
+# Fallback 2: IPv6 link-local, EUI-64 from the NIC's MAC ({{ .nasMac }}) -- so it is
+# derivable without asking the box, which is the entire point: you cannot ask it during
+# the outage that makes you need this. No DHCP, no lease, no daemon, no router.
 # Proved itself 2026-08-01: the SSD dropped off the bus, dhclient could not renew from
 # a dead disk, both IPv4 addresses vanished and the tailnet went with them -- this was
 # the only way back in.
+# ⚠ 2026-08-10: that property is NOT free on Debian 13. It ships dhcpcd with
+#   `slaac private` (RFC 7217: host secret + interface name), which produced an
+#   unpredictable fe80::28b2:391:c835:b114 after the reinstall. Fixed with `slaac hwaddr`
+#   in /etc/dhcpcd.conf (nas repo config/dhcpcd.conf; also in the preseed's late_command
+#   so a rebuild comes up correct). The kernel knob addr_gen_mode is NOT the lever --
+#   dhcpcd forces it to 1 and generates the address itself. Re-verify after any reinstall:
+#     ssh nas-lan 'ip -6 addr show scope link'
+# ⚠ A stable address means stale known_hosts entries COLLIDE across reinstalls. Clear with
+#   ssh-keygen -R, or this fallback fails at exactly the moment you need it.
+# ⚠ The NIC is enp2s0 as of 2026-08-10 (was enp1s0) -- populating the M.2 slot shifted
+#   PCI enumeration. Same MAC, so this address is unaffected.
 # CAVEAT 1: the %%wlp0s20f3 suffix is THIS laptop's interface, not the NAS's. Link-local
 # addresses are only meaningful per-link, so the scope must name the local interface
 # the NAS is reachable on. Using the USB ethernet adapter instead? Change the suffix
