@@ -14,7 +14,8 @@ Exit 0 = clean, 1 = problems found. Run from /housekeeping or monthly cleanup.
 """
 import glob, os, re, sys
 
-MEM = os.path.expanduser("~/.claude/projects/-home-ta/memory")
+MEM = os.environ.get(
+    "MEMORY_DIR", os.path.expanduser("~/.claude/projects/-home-ta/memory"))
 VALID_TYPES = {"user", "feedback", "project", "reference"}
 
 
@@ -63,6 +64,10 @@ def main():
             if link.strip() and link not in stems:
                 problems.append(f"{f}: dangling link [[{link}]]")
 
+    if not os.path.exists("MEMORY.md"):
+        print(f"memcheck: {len(files)} memories, 1 problem(s)")
+        print("  MEMORY.md missing — the index is what recall loads first")
+        return 1
     idx = open("MEMORY.md").read()
     # only real entry lines: "- [Title](file.md) — hook"
     linked = {m.group(1) for m in
