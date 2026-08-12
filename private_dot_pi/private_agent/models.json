@@ -25,8 +25,22 @@
       "api": "openai-completions",
       "apiKey": "ollama",
       "models": [
-        { "id": "gemma4:e2b", "name": "Gemma4 e2b (local)" },
-        { "id": "gemma4:e4b", "name": "Gemma4 e4b (local)" }
+        {
+          "id": "qwen3-instruct",
+          "name": "Qwen3 30B-A3B Instruct (local, 16k ctx)"
+        },
+        {
+          "id": "qwen3:30b-a3b-instruct-2507-q4_K_M",
+          "name": "Qwen3 30B-A3B Instruct (local, unpinned ctx — high RAM)"
+        },
+        {
+          "id": "gemma4:e2b",
+          "name": "Gemma4 e2b (local, vision+audio)"
+        },
+        {
+          "id": "gemma4:e4b",
+          "name": "Gemma4 e4b (local, vision+audio)"
+        }
       ]
     }
   }

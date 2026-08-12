@@ -86,7 +86,8 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   - Dev patterns → obsidian-vault/dev/
   - Cross-project rules → CLAUDE.md
 - [ ] No session-specific context saved to durable docs
-- [ ] MEMORY.md still under 200 lines
+- [ ] **Memory store integrity** — run `python3 ~/.claude/scripts/memcheck.py`. Exit 0 = clean; it validates `name:` == filename stem, description/type present, `[[links]]` resolve, and that MEMORY.md matches disk both ways. Fix anything it reports before finishing (all are mechanical). If a memory was added this session, it also catches a missing index entry.
+- [ ] MEMORY.md is index-only and under 200 lines — one line per memory, no content blocks, and no mirroring of harness-supplied facts (model IDs, tool names) that only go stale
 - [ ] **Glossary upkeep (#56)** — did this session coin/use a new shared-vocabulary term (project codename, tool shorthand, recurring abbreviation, or a person/place alias)? Offer to add it, routing by sensitivity:
   - **Public** (codenames, tools, abbrevs) → `~/obsidian-vault/system/glossary.md` (loads globally via the `~/.claude/rules/glossary.md` symlink; **public terms only** — its contents ship to whatever model backs the session)
   - **PII** (people, places, real identities) → `~/.claude/pii-aliases.local.md` (local, un-synced — never put PII in the vault glossary)
