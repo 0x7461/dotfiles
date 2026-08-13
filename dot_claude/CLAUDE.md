@@ -7,12 +7,12 @@
 - User runs all sudo commands themselves.
 
 ## Critical Rules
-- **Monthly CC cleanup:** run `~/.claude/scripts/memcheck.py` (index/name/link integrity), review settings.json for stale flags, check CLAUDE.md is under 200 lines.
+- **Monthly CC cleanup:** run `~/.claude/scripts/memcheck.py` (index/name/link integrity), review settings.json for stale flags, check CLAUDE.md is under 200 lines (Anthropic's documented target — longer reduces adherence).
 
 - **NEVER alter or delete files in ~/archive without explicit user permission.** No exceptions.
 - IDEAS.md is **index only** — status + one-liner + link. No research blobs.
 - This file: **soft limit 200 lines.** Be comprehensive on rules I've actually had to enforce — under-specified rules invite rationalization. Cut hedges, examples, and "for instance" padding ruthlessly.
-- MEMORY.md is **index only** — one line per memory (`- [Title](file.md) — hook`). Memory bodies live in their own file; never park content in the index. Don't mirror harness-supplied facts (model IDs, tool names) there — they only go stale.
+- MEMORY.md is **index only** — one line per memory (`- [Title](file.md) — hook`). Memory bodies live in their own file; never park content in the index. **Hard cap: 200 lines OR 25KB, whichever hits first** — CC loads only that much and silently drops the rest at session start, so overflow = lost memories, no error. At ~169 bytes/entry the **byte limit binds first (~148 entries)**, well before 200 lines. `maint-watch` checks both. Don't mirror harness-supplied facts (model IDs, tool names) there — they only go stale.
 - **No `project_*.md` files in memory.** Memory is for behavior + cross-project reference only. Project-specific content goes to that project's PLAN.md.
 - **No INSIGHTS.md / research.md / notes.md files anywhere.** They drift into stale shadow-docs. Deep internals: PLAN.md `## Internals` (narrative) or `agent_docs/<topic>.md` (imperative agent reference when AGENTS.md overflows). Per-project doc layout: see `## Documentation`.
 - **Glossary / aliases (#56):** public terms (codenames, tools, abbrevs) load globally via `~/.claude/rules/glossary.md` (→ synced vault `system/glossary.md`). **PII aliases** (people/places/real identities) live ONLY in local, un-synced `~/.claude/pii-aliases.local.md` — read it **on-demand** to resolve a real name/place, **only on private-tier models** (Anthropic/CC or local Ollama); **never read or surface it on DeepSeek/non-private backends** (they train on data), and never add it to chezmoi or the vault.
@@ -22,7 +22,7 @@
 - **Per-project doc tiers** (canonical spec: `~/projects/agent-docs/PLAN.md`):
   - `AGENTS.md` — agent-imperative. Setup, commands, layout, Boundaries (Always/Never/Ask first/Untested), workflows. Aim <150 lines, hard <300. Cross-tool standard.
   - `CLAUDE.md` — one-line `@AGENTS.md` shim. Always create alongside AGENTS.md.
-  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research, History. `Updated: YYYY-MM-DD` header. Soft limit ~300 lines, trim-on-done. **Backlog items are `- [ ]` checkboxes** (one per top-level item; sub-bullets plain; shipped items removed → History, never `- [x]`).
+  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research, History. `Updated: YYYY-MM-DD` header. **Soft limit 24,000 chars** (~6,150 tokens) — chars not lines, because lines hide dense tables; trim-on-done. **Backlog items are `- [ ]` checkboxes** (one per top-level item; sub-bullets plain; shipped items removed → History, never `- [x]`).
   - `README.md` — optional end-user docs. Skip for personal-use tools.
   - `agent_docs/<topic>.md` — only when imperative content overflows AGENTS.md.
 - `~/obsidian-vault/system/*.md` — system knowledge | `dev/*.md` — dev knowledge
@@ -99,7 +99,7 @@
 - **Never `ssh -t host 'sudo cmd' > file`.** `-t` merges the remote's stderr into the pty, so the redirect swallows the sudo prompt: it hangs with no output, reading as a network fault rather than a password prompt you can't see. To pull a root-owned remote file, copy it first, then fetch: `ssh -t host 'sudo install -m 600 -o ta -g ta /path/secret /tmp/x'` → `scp host:/tmp/x ./dest` → `ssh host 'rm -f /tmp/x'`.
 - **chezmoi secret detection:** exit 1 but file IS added. Edit `.tmpl` to replace secret with `{{ .varName }}`, store in `chezmoi.toml [data]`.
 - **chezmoi mode bits:** can't represent group-writable per-file ([#769](https://github.com/twpayne/chezmoi/issues/769)); `umask = 0o002` in `chezmoi.toml` is the only workaround — `re-add` can't fix it, source can't express 664. **Verify the line exists** before believing a mode-drift report: it was silently absent 2026-07-30, making 196 group-writable files show as phantom drift. `chezmoi status` paths are $HOME-relative — prefix them or `chezmoi diff` returns empty and misreports content drift as mode-only.
-- **Skills:** canonical home `~/.agents/skills/<name>/SKILL.md` (AAIF standard; pi/opencode read it natively, CC reads via the `~/.claude/skills` symlink — same files either way). Must `ToolSearch select:<ToolName>` before calling deferred tools. Aim ≤100 lines; split overflow to `REFERENCE.md` / topic files. Skill `description` format: "What it does. Use when [triggers]."
+- **Skills:** canonical home `~/.agents/skills/<name>/SKILL.md` (AAIF standard; pi/opencode read it natively, CC reads via the `~/.claude/skills` symlink — same files either way). Must `ToolSearch select:<ToolName>` before calling deferred tools. Aim ≤100 lines; split overflow to `REFERENCE.md` / topic files. (Anthropic's own ceiling is 500 lines — ≤100 is a deliberately stricter house rule, cheap to keep since skill bodies load on demand.) Skill `description` format: "What it does. Use when [triggers]."
 - **settings.local.json:** Edit tool fails mid-edit — always use Write tool.
 - **History lookups:** `history.jsonl` is 9MB+ — never Read it. Filter via `Bash python3 -c` or recap.py.
 - **runit user services:** `~/service/`, not `/var/service/`. `SVDIR=~/service sv <cmd>`. Creating a service dir = runsv discovers it and starts immediately; the `down` sentinel file only blocks auto-start at *next boot*, not first discovery. To stage without running: create files, then `sv down <name>`.
