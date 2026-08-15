@@ -17,6 +17,7 @@ Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 - [ ] `Updated: YYYY-MM-DD` refreshed on touched docs (PLAN.md and AGENTS.md)
 - [ ] IDEAS.md status still accurate (Idea/Research/Implement/Maintain/Archived)
 - [ ] **Trim-on-done:** any roadmap item just shipped? Collapse its detail block into a one-line History entry. Don't let ✅-done blocks accumulate.
+- [ ] **Trimming an oversize PLAN.md — read it end-to-end first.** The size is rarely the real find; **stale claims are**, and they only surface on a full read. Three of three trims on 2026-08-14/15 turned one up: `ax88179` prescribed a decisive test it had already run ("until then, change nothing"), and `agent-docs` marked a finished phase `✱ current` plus a shipped skill "deferred". Collapse *finished* work (History, closed investigations, completed phases) rather than deleting live reference — and before cutting anything whose imperative half is supposed to live in AGENTS.md, grep AGENTS.md to confirm it actually does. ⚠ Never trim an un-versioned PLAN.md: `git init` first, or the removed content is simply gone (learned the expensive way — see [[feedback_flag_inferred_structure]]).
 
 ## Git hygiene (after code changes in a git repo)
 
