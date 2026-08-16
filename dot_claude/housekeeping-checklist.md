@@ -3,7 +3,7 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-08-02 (service-changes section gained snooze-spec verification, finish-hook install, cadence declaration, and a real-run check — all driven by mistakes made that session)
+**Last reviewed:** 2026-08-16 (added the spec-hygiene claim-vs-world check, after a quarterly pass found stale claims in 5 of 7 projects that all read coherently on the page)
 **Last CC cleanup:** 2026-07-05
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
@@ -18,6 +18,8 @@ Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 - [ ] IDEAS.md status still accurate (Idea/Research/Implement/Maintain/Archived)
 - [ ] **Trim-on-done:** any roadmap item just shipped? Collapse its detail block into a one-line History entry. Don't let ✅-done blocks accumulate.
 - [ ] **Trimming an oversize PLAN.md — read it end-to-end first.** The size is rarely the real find; **stale claims are**, and they only surface on a full read. Three of three trims on 2026-08-14/15 turned one up: `ax88179` prescribed a decisive test it had already run ("until then, change nothing"), and `agent-docs` marked a finished phase `✱ current` plus a shipped skill "deferred". Collapse *finished* work (History, closed investigations, completed phases) rather than deleting live reference — and before cutting anything whose imperative half is supposed to live in AGENTS.md, grep AGENTS.md to confirm it actually does. ⚠ Never trim an un-versioned PLAN.md: `git init` first, or the removed content is simply gone (learned the expensive way — see [[feedback_flag_inferred_structure]]).
+
+- [ ] **Spec-hygiene: check doc claims against the world, not against other docs.** A stale PLAN reads perfectly coherently — that is why re-reading it doesn't catch anything. Run the commands. On 2026-08-15 this found `aria2` presenting four shipped phases as pending (the service had been up for days, yt-dlp/gallery-dl were already routing through it, the magnet handler was registered), `compress` marking a botkit integration "(future)" that was live in `trending.go`, and — the one that mattered — `dotfiles` documenting **1 of 6** template variables, which would have produced a *silently broken* `~/.ssh/config` on a rebuild, since chezmoi renders an undefined variable as empty rather than failing. ⚠ **Never hand-copy a directory listing into a doc** — replace it with the command that derives it (`chezmoi managed`, `ls`). The dotfiles inventory named four tools that were gone and omitted the compositor in use.
 
 ## Git hygiene (after code changes in a git repo)
 
