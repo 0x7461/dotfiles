@@ -4,7 +4,7 @@ Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
 **Last reviewed:** 2026-08-16 (added the spec-hygiene claim-vs-world check, after a quarterly pass found stale claims in 5 of 7 projects that all read coherently on the page)
-**Last CC cleanup:** 2026-07-05
+**Last CC cleanup:** 2026-08-16 (memcheck clean at 69; CLAUDE.md 109/200 lines; settings reviewed — surfaced a cleanupPeriodDays conflict, see below)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
