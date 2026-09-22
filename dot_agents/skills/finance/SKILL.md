@@ -27,14 +27,16 @@ So: load the context, state the frame, put the live items on the table, let the 
 ~/obsidian-vault/finance/strategy.md     ~/obsidian-vault/finance/accounts.md
 ```
 
-Don't read `logs/` unless the user asks about a specific past session. Never display raw credentials from `accounts.md` — summarize balances only.
+Don't read `logs/` or `decisions.md` unless the user asks about a specific past session or why a
+settled question was settled the way it was — `decisions.md` holds derivations `strategy.md` already
+summarises, and loading it costs context without adding a live number. Never display raw credentials from `accounts.md` — summarize balances only.
 
 ### 2. State the frame — Generated Knowledge, before any reasoning
 
 One compact block. Everything in step 3 must reference these numbers, not vibes.
 
 - **Allocation:** bucket totals from `dashboard.md`, each with gap to 4-3-2-1 in MU and %.
-- **Guardrails:** every rule in `strategy.md`, each marked OK or breached with the margin (manager concentration ≤40%, loans expensed at issue).
+- **Guardrails:** every rule in `strategy.md`, each marked OK or breached with the margin (within-asset-class manager concentration ≤50%, loans expensed at issue).
 - **Log position:** newest entry, whether it is `⚠ PROVISIONAL` and past its finalize-by date, and any month with no entry at all.
 - **Budget:** monthly own-burn ceiling vs the last actual; savings rate on the recurring base, never on gross.
 - **EF:** months of cover vs target, ex-tontine.
@@ -64,6 +66,7 @@ Procedures chain. A log pass that finds unbudgeted spend flows into `BUDGET.md`;
 | `dashboard.md` | Current portfolio snapshot | After trades settle |
 | `log.md` | Monthly entries (6-bullet, append-only) | A month closes |
 | `strategy.md` | Policy — targets, guardrails, cadence | Strategy changes only |
+| `decisions.md` | Why settled questions were settled — read on demand, never at session start | A question is settled or re-opened |
 | `budget.md` | Monthly "every dollar a job" plan (YNAB-lite) | Income or fixed-cost changes |
 | `funds.md` | Fund directory — mandate, bucket, platform | Roster or channel changes |
 | `accounts.md` | Non-fund accounts (cash, EF, FX, receivables) | When accounts change |
