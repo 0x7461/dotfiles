@@ -78,7 +78,9 @@ For each file, mirror the canonical sections from the spec. Where project-specif
 - `## Backlog` *(empty)*
 - `## Internals` *(TODO)*
 - `## Decisions` *(empty)*
-- `## History` *(empty; one starter line: "YYYY-MM-DD — Project scaffolded")*
+- `## History` *(empty; one starter line: "YYYY-MM-DD — Project scaffolded")* — stays in PLAN.md
+  while small; split to `HISTORY.md` once it passes ~3,000 chars or PLAN.md passes 22,000 (spec:
+  `agent-docs/PLAN.md` → the `HISTORY.md` tier). Don't scaffold an empty HISTORY.md.
 
 ### 5. Show + confirm
 

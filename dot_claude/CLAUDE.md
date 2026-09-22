@@ -22,7 +22,8 @@
 - **Per-project doc tiers** (canonical spec: `~/projects/agent-docs/PLAN.md`):
   - `AGENTS.md` — agent-imperative. Setup, commands, layout, Boundaries (Always/Never/Ask first/Untested), workflows. Aim <150 lines, hard <300. Cross-tool standard.
   - `CLAUDE.md` — one-line `@AGENTS.md` shim. Always create alongside AGENTS.md.
-  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research, History. `Updated: YYYY-MM-DD` header. **Soft limit 24,000 chars** (~6,150 tokens) — chars not lines, because lines hide dense tables; trim-on-done. **Backlog items are `- [ ]` checkboxes** (one per top-level item; sub-bullets plain; shipped items removed → History, never `- [x]`).
+  - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research. `Updated: YYYY-MM-DD` header. **Soft limit 24,000 chars** (~6,150 tokens) — chars not lines, because lines hide dense tables; trim-on-done. **Backlog items are `- [ ]` checkboxes** (one per top-level item; sub-bullets plain; shipped items removed → HISTORY.md, never `- [x]`).
+  - `HISTORY.md` — PLAN.md's `## History`, split out once it passes ~3,000 chars or PLAN.md passes 22,000. **No size cap; grep it, never Read it whole** (same rule as `history.jsonl`). One dated bullet per entry, newest first; leave a `## History` stub in PLAN.md. Not a shadow-doc — one owner, one copy.
   - `README.md` — optional end-user docs. Skip for personal-use tools.
   - `agent_docs/<topic>.md` — only when imperative content overflows AGENTS.md.
 - `~/obsidian-vault/system/*.md` — system knowledge | `dev/*.md` — dev knowledge
@@ -89,6 +90,8 @@
 **Use Markdown when** the file lives in context long-term, gets re-edited, or is version-controlled (PLAN.md, AGENTS.md, SKILL.md, log files). HTML diffs are noisy and each re-edit pass compounds document corruption.
 
 **The test:** "Will this be re-edited?" → Markdown. "Will this be read or used once?" → HTML.
+
+**Register — density, not prohibition.** Most overused here: `load-bearing`, `deliberately`, `genuinely`, `carries`, `quietly`, `parked`, `verbatim`. Use them when they're *the right word*, never as default register — prefer the plain verb ("this breaks" over "this is load-bearing"). Not a ban: `no-op`, `byte-identical`, `idempotent` have no better synonyms. Measurements + full list: `reference_llm_register_vocabulary`.
 
 ## Toolchain
 - **proto** manages runtimes (Go, Python, Node, Bun, uv) — never system package manager.
