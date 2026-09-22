@@ -3,7 +3,7 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-08-16 (added the spec-hygiene claim-vs-world check, after a quarterly pass found stale claims in 5 of 7 projects that all read coherently on the page)
+**Last reviewed:** 2026-09-18 (added the pre-check-before-remediation section after walking into the Camoufox lock trap a second time, plus the output-styles and two-owner config checks)
 **Last CC cleanup:** 2026-08-16 (memcheck clean at 69; CLAUDE.md 109/200 lines; settings reviewed — surfaced a cleanupPeriodDays conflict, see below)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
@@ -65,6 +65,15 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 - [ ] reproducibility.md still accurate (new packages, changed steps)
 - [ ] packages.md updated if new packages installed
 
+- [ ] **`~/.claude/output-styles/*.md` changed?** These are NOT chezmoi-managed. They sync to the
+  work machine through the `cc-at-work` gist (`git@gist.github.com:2ce62c03b78b14953f8a47bd8b937365`).
+  Edit, then push the gist, or the two machines diverge with no drift signal anywhere. A style only
+  loads at session start, so a change is invisible until the next `claude`.
+
+- [ ] **A file with two owners?** `~/.claude/statusline.sh` is in chezmoi *and* in the gist since
+  2026-09-18. Whichever you edited, update the other, or the next `chezmoi apply` reverts a gist pull.
+  Prefer collapsing to one owner when the sync settles.
+
 ## After service changes (runit)
 
 - [ ] Run script matches current binary/config paths
@@ -80,6 +89,15 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 - [ ] Binary rebuilt (`go build -o bin/<bot> ./cmd/<bot>/`)
 - [ ] Service restarted (`SVDIR=~/service sv restart <bot>`)
 - [ ] Bot token env vars set in .env
+
+## Before remediating a failure that has a memory
+
+- [ ] **Run the memory's named pre-check first.** A memory written for a symptom usually records how
+  that symptom lies. `reference_camoufox_stale_lock` says to `grep -c coreBundle.js <log>` before
+  touching a lock file, because "Connection closed while reading from the driver" has two causes and
+  the stale lock is the *residue* of the other one. Skipped twice now — 2026-08-29 and 2026-09-18 —
+  both times by reading only the tail of the log, which starts below the Node stack trace. Reading a
+  log tail is not reading the log.
 
 ## Session end (replaces save-learnings)
 
