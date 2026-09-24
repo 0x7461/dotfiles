@@ -2,6 +2,16 @@
 exec 2>&1
 cd /home/ta/projects/botkit
 
-# Run once a day at noon (lunch read)
-exec snooze -H12 \
-  /home/ta/projects/botkit/bin/rss-bot
+# Fires daily at 18:00, but only Mon + Fri actually send.
+#
+# Fetching has to happen daily even though delivery is twice weekly: a feed only
+# exposes its newest `max_items`, so a twice-weekly fetch silently loses whatever
+# the busy feeds published in between. So every evening ranks that day's items and
+# queues the winners (`-mode=curate`); Mon and Fri do the same and then flush the
+# queue (`-mode=deliver`). Each curate prompt stays the size gemma4 already handles
+# well (~50 items) rather than one 3x longer on delivery day.
+#
+# 18:00 not noon: measured activity is evening-weighted (17:00-01:00 local).
+# Friday not Saturday: scout already delivers Sat 09:00; keep them apart.
+exec snooze -H18 -M0 \
+  sh -c 'case $(date +%u) in 1|5) m=deliver ;; *) m=curate ;; esac; exec /home/ta/projects/botkit/bin/rss-bot -mode="$m"'

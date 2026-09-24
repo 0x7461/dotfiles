@@ -4,7 +4,7 @@ Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
 **Last reviewed:** 2026-09-18 (added the pre-check-before-remediation section after walking into the Camoufox lock trap a second time, plus the output-styles and two-owner config checks)
-**Last CC cleanup:** 2026-08-16 (memcheck clean at 69; CLAUDE.md 109/200 lines; settings reviewed — surfaced a cleanupPeriodDays conflict, see below)
+**Last CC cleanup:** 2026-09-24 (memcheck clean at 82; CLAUDE.md 112/200 lines; MEMORY.md 98 lines / 14,635 bytes)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
@@ -141,7 +141,11 @@ du -sh ~/.local/share/Trash "/run/media/ta/T7 Shield/.Trash-1000" 2>/dev/null
 ```
 
 - [ ] Surface contents + sizes for a keep/purge decision (user runs the empty command themselves).
-- Last emptied: never (bins in use since 2026-07; ~11.1 GB parked on T7 as of 2026-07-05)
+- Last emptied: never. **Home trash measured 2026-09-24: 5.2 GB, 971 items, oldest 2023-01-14** —
+  the "in use since 2026-07" note was wrong, it has been accumulating for ~3 years. T7 held a
+  further ~11.1 GB as of 2026-07-05 (not re-measured; T7 unmounted). Note `gio list trash://`
+  reported **0 items** against a populated `~/.local/share/Trash/files` — don't trust it alone,
+  check the directory.
 
 ## Checklist self-revision triggers
 
