@@ -10,6 +10,9 @@ if status is-interactive
 	set -gx PATH $PATH $HOME/.local/bin
 end
 
-# proto
-set -gx PROTO_HOME "$HOME/.proto";
-set -gx PATH "$PROTO_HOME/shims" "$PROTO_HOME/bin" $PATH;
+# mise (Go, Node): PATH hooks in interactive shells, shims everywhere else
+if status is-interactive
+	mise activate fish | source
+else
+	mise activate fish --shims | source
+end
