@@ -141,7 +141,10 @@ du -sh ~/.local/share/Trash "/run/media/ta/T7 Shield/.Trash-1000" 2>/dev/null
 ```
 
 - [ ] Surface contents + sizes for a keep/purge decision (user runs the empty command themselves).
-- Last emptied: never. **Home trash measured 2026-09-24: 5.2 GB, 971 items, oldest 2023-01-14** —
+- Last emptied: never. **2026-09-28: 11 GB, 975 items** (4.9 GB of it the retired `~/.proto` +
+  `~/.bun`; 2.5 GB is trashed `~/archive` files — deleting those needs explicit OK). User approved
+  emptying; CC's `rm -rf` on the trash was permission-denied, so the user runs it. `gio trash --list`
+  fails here (`trash:: Operation not supported`). Earlier: **2026-09-24: 5.2 GB, 971 items, oldest 2023-01-14** —
   the "in use since 2026-07" note was wrong, it has been accumulating for ~3 years. T7 held a
   further ~11.1 GB as of 2026-07-05 (not re-measured; T7 unmounted). Note `gio list trash://`
   reported **0 items** against a populated `~/.local/share/Trash/files` — don't trust it alone,
