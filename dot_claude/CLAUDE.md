@@ -94,8 +94,8 @@
 **Register — density, not prohibition.** Most overused here: `load-bearing`, `deliberately`, `genuinely`, `carries`, `quietly`, `parked`, `verbatim`. Use them when they're *the right word*, never as default register — prefer the plain verb ("this breaks" over "this is load-bearing"). Not a ban: `no-op`, `byte-identical`, `idempotent` have no better synonyms. Measurements + full list: `reference_llm_register_vocabulary`.
 
 ## Toolchain
-- **proto** manages runtimes (Go, Python, Node, Bun, uv) — never system package manager.
-- **uv** for Python (not pip/venv). **rustup** for Rust (not proto).
+- **proto** manages runtimes (Go, Node) — never system package manager.
+- **uv** owns all Python: interpreters (`python-preference = "only-managed"`), venvs, tools — never pip/venv/proto. Pin a minor version per project in a tracked `.python-version`; default latest stable. uv itself is the xbps package. **rustup** for Rust (not proto).
 
 ## Known Gotchas
 - **SSH key:** `~/.ssh/id_ed25519_gh`. Always `git@github.com:` URLs. Handled by `~/.ssh/config` — no `GIT_SSH_COMMAND` needed.
