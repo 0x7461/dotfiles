@@ -187,7 +187,9 @@ for sid in session_meta:
     if not lines:
         continue
     file_versions = {}
-    usage = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "turns": 0}
+    # CC writes one line per content block, each repeating the request's usage —
+    # key by message.id so a request counts once (summing lines inflated ~2x, 2026-09-28)
+    request_usage = {}
     for line in lines:
         # File history
         if "file-history-snapshot" in line:
@@ -204,15 +206,19 @@ for sid in session_meta:
             try:
                 e = json.loads(line)
                 if e.get("type") == "assistant":
-                    u = e.get("message", {}).get("usage", {})
+                    msg = e.get("message", {})
+                    u = msg.get("usage", {})
                     if u:
-                        usage["input"]       += u.get("input_tokens", 0)
-                        usage["output"]      += u.get("output_tokens", 0)
-                        usage["cache_read"]  += u.get("cache_read_input_tokens", 0)
-                        usage["cache_write"] += u.get("cache_creation_input_tokens", 0)
-                        usage["turns"]       += 1
+                        request_usage[msg.get("id") or e.get("uuid")] = u
             except json.JSONDecodeError:
                 pass
+    usage = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
+             "turns": len(request_usage)}
+    for u in request_usage.values():
+        usage["input"]       += u.get("input_tokens", 0)
+        usage["output"]      += u.get("output_tokens", 0)
+        usage["cache_read"]  += u.get("cache_read_input_tokens", 0)
+        usage["cache_write"] += u.get("cache_creation_input_tokens", 0)
     session_files[sid] = {p: v for p, v in file_versions.items() if v > 1}
     if usage["turns"] > 0:
         session_tokens[sid] = usage
