@@ -1,6 +1,6 @@
 ---
 name: agent-docs-init
-description: Scaffold the per-project doc tier (AGENTS.md + @AGENTS.md CLAUDE.md shim + PLAN.md) from the canonical spec at ~/projects/agent-docs/PLAN.md. Use when starting a new project under ~/projects/, when an idea graduates from IDEAS.md to a real project, or when an existing project needs the agent-docs tier added.
+description: Scaffold the per-project doc tier (AGENTS.md + @AGENTS.md CLAUDE.md shim + PLAN.md) from the canonical spec at ~/projects/ithaca/doc-tiers/PLAN.md. Use when starting a new project under ~/projects/, when an idea graduates from IDEAS.md to a real project, or when an existing project needs the agent-docs tier added.
 user-invocable: true
 allowed-tools:
   - Read
@@ -30,7 +30,7 @@ ls "$PROJECT_DIR"/{AGENTS.md,CLAUDE.md,PLAN.md} 2>/dev/null
 
 ### 2. Read the canonical spec
 
-Read `~/projects/agent-docs/PLAN.md` sections `## The doc tiers (canonical spec)` — this is the single source of truth for what each file should contain. Do not invent structure; mirror the spec.
+Read `~/projects/ithaca/doc-tiers/PLAN.md` sections `## The doc tiers (canonical spec)` — this is the single source of truth for what each file should contain. Do not invent structure; mirror the spec.
 
 ### 3. Gather project context
 
@@ -80,7 +80,7 @@ For each file, mirror the canonical sections from the spec. Where project-specif
 - `## Decisions` *(empty)*
 - `## History` *(empty; one starter line: "YYYY-MM-DD — Project scaffolded")* — stays in PLAN.md
   while small; split to `HISTORY.md` once it passes ~3,000 chars or PLAN.md passes 22,000 (spec:
-  `agent-docs/PLAN.md` → the `HISTORY.md` tier). Don't scaffold an empty HISTORY.md.
+  `ithaca/doc-tiers/PLAN.md` → the `HISTORY.md` tier). Don't scaffold an empty HISTORY.md.
 
 ### 5. Show + confirm
 
@@ -96,6 +96,6 @@ Write the three files. Then tell the user:
 
 ## Notes
 
-- The canonical spec lives in `~/projects/agent-docs/PLAN.md`. **Always read it fresh** at step 2 — never cache the structure in this skill, since the spec evolves.
+- The canonical spec lives in `~/projects/ithaca/doc-tiers/PLAN.md`. **Always read it fresh** at step 2 — never cache the structure in this skill, since the spec evolves.
 - For non-code projects (knowledge bases, idea-only dirs), AGENTS.md is usually overkill. Suggest skipping it unless the user explicitly wants the full tier.
 - For private/personal repos where PLAN.md will be gitignored, AGENTS.md must be self-sufficient — note this in step 5 before writing.

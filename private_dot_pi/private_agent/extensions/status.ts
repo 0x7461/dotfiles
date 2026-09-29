@@ -8,7 +8,7 @@ import { join } from "node:path";
 // shows dir, branch, model, thinking level, context % and session cost):
 //   - uncommitted file count in the session cwd
 //   - what the active paid provider has left, which CC showed as its 5h/7d limit meters.
-//     Two hosts are in play (harness-migration PLAN, Decisions):
+//     Two hosts are in play (ithaca PLAN, Decisions):
 //     * opencode-go — flat subscription with capped allowances. Go prices usage at the same
 //       per-token rates pi records in `usage.cost`, so summing those approximates Go's meter.
 //     * deepseek (direct, prepaid) — the balance from DeepSeek's API is the ground truth and

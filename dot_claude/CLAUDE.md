@@ -19,7 +19,7 @@
 
 ## Documentation
 - `~/projects/IDEAS.md` — project index (slim entries only)
-- **Per-project doc tiers** (canonical spec: `~/projects/agent-docs/PLAN.md`):
+- **Per-project doc tiers** (canonical spec: `~/projects/ithaca/doc-tiers/PLAN.md`):
   - `AGENTS.md` — agent-imperative. Setup, commands, layout, Boundaries (Always/Never/Ask first/Untested), workflows. Aim <150 lines, hard <300. Cross-tool standard.
   - `CLAUDE.md` — one-line `@AGENTS.md` shim. Always create alongside AGENTS.md.
   - `PLAN.md` — narrative. Status, Backlog, Decisions, Internals, Research. `Updated: YYYY-MM-DD` header. **Soft limit 24,000 chars** (~6,150 tokens) — chars not lines, because lines hide dense tables; trim-on-done. **Backlog items are `- [ ]` checkboxes** (one per top-level item; sub-bullets plain; shipped items removed → HISTORY.md, never `- [x]`).
