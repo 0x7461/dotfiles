@@ -106,6 +106,28 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   both times by reading only the tail of the log, which starts below the Node stack trace. Reading a
   log tail is not reading the log.
 
+## ithaca watch (every housekeeping — expires 2026-10-29)
+
+The agent store went live 2026-09-29 (`~/projects/ithaca/store/`, exposed as `~/.agents`). Run
+this every time for a month to catch breakage early. Record anything found as a fix item in
+ithaca's PLAN Backlog. **On or after 2026-10-29:** summarise the month in ithaca HISTORY, then
+delete this section.
+
+- [ ] **Store committed and pushed.** Memory now lives in ithaca, so /housekeeping is its commit
+  path: `git -C ~/projects/ithaca status -sb` — commit memory/rule edits from this session,
+  then `git push` (the private remote is the only off-site copy).
+- [ ] **Links intact:** `readlink ~/.agents` → `/home/ta/projects/ithaca/store`, and
+  `find ~/.claude ~/.agents -maxdepth 3 -xtype l -not -path '*/debug/*'` prints nothing (no
+  dangling links; `debug/latest` is CC's own and often dangles).
+  `chezmoi status` clean for `.claude` / `.agents` paths.
+- [ ] **CC saved a memory this session?** Confirm it landed in `store/memory/` (it shows in
+  ithaca's `git status`). The first confirmed save clears AGENTS.md "Untested: CC saving a
+  memory through the symlinked folder".
+- [ ] **pi used this session?** Note anything pi missed that CC follows (a rule, the output
+  style, a memory). pi reads the store once per session, so edits apply next session.
+- [ ] **After 2026-10-05:** `git -C ~/projects/ithaca log --oneline --grep 'Weekly snapshot' -1`
+  shows a W41+ commit — the memory-snapshot service's commit path works inside ithaca.
+
 ## Session end (replaces save-learnings)
 
 - [ ] Non-obvious discoveries routed to correct doc:
@@ -113,7 +135,7 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   - System knowledge → obsidian-vault/system/
   - Dev patterns → obsidian-vault/dev/
   - Cross-project rules → CLAUDE.md if machine-bound, `~/.claude/rules/behaviour.md` if portable
-    (split 2026-09-29; both load in CC natively and in pi via `claude-context.ts`)
+    (split 2026-09-29; both load in CC natively and in pi via `store-context.ts`)
 - [ ] No session-specific context saved to durable docs
 - [ ] **Memory store integrity** — run `python3 ~/.claude/scripts/memcheck.py`. Exit 0 = clean; it validates `name:` == filename stem, description/type present, `[[links]]` resolve, and that MEMORY.md matches disk both ways. Fix anything it reports before finishing (all are mechanical). If a memory was added this session, it also catches a missing index entry.
 - [ ] MEMORY.md is index-only and under 200 lines — one line per memory, no content blocks, and no mirroring of harness-supplied facts (model IDs, tool names) that only go stale
