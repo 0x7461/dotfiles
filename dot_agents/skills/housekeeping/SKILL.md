@@ -41,7 +41,8 @@ Procedural format, mark `⚠ untested` when applicable, refresh `Updated:` dates
 | System knowledge | `~/obsidian-vault/system/<topic>.md` |
 | Dev knowledge | `~/obsidian-vault/dev/<topic>.md` |
 | Project status changed | `~/projects/IDEAS.md` (slim entry — link to PLAN.md) |
-| Cross-project rule or gotcha | `~/.claude/CLAUDE.md` |
+| Cross-project rule or gotcha, tied to this machine (paths, tools, doc layout) | `~/.claude/CLAUDE.md` |
+| Cross-project behaviour rule, portable (how to work with me) | `~/.claude/rules/behaviour.md` |
 | New shared-vocab term (codename / alias / abbrev) | `~/obsidian-vault/system/glossary.md` (public) · `~/.claude/pii-aliases.local.md` (PII — never synced/always-loaded) |
 
 **Threshold:** only save if non-obvious AND would save time in a future session. Skip if derivable from `git log`, already in CLAUDE.md/PLAN.md, or session-specific.

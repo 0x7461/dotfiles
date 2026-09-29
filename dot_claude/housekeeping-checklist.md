@@ -68,7 +68,13 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 - [ ] **`~/.claude/output-styles/*.md` changed?** These are NOT chezmoi-managed. They sync to the
   work machine through the `cc-at-work` gist (`git@gist.github.com:2ce62c03b78b14953f8a47bd8b937365`).
   Edit, then push the gist, or the two machines diverge with no drift signal anywhere. A style only
-  loads at session start, so a change is invisible until the next `claude`.
+  loads at session start, so a change is invisible until the next `claude`. pi reads the style too,
+  through `~/.pi/agent/extensions/claude-context.ts`, which **hardcodes the file path** — a renamed
+  or switched style needs that path changed as well.
+
+- [ ] **Changed a CC hook, rule file or the status line?** pi has its own ports in
+  `~/.pi/agent/extensions/` (`audit-commands.ts`, `notify.ts`, `status.ts`; chezmoi-tracked). Change
+  both sides or they drift. Where they live and how each was verified: `~/projects/ithaca/agent_docs/pi-setup.md`.
 
 - [ ] **A file with two owners?** `~/.claude/statusline.sh` is in chezmoi *and* in the gist since
   2026-09-18. Whichever you edited, update the other, or the next `chezmoi apply` reverts a gist pull.
@@ -106,7 +112,8 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   - Build/tool/errors → project PLAN.md
   - System knowledge → obsidian-vault/system/
   - Dev patterns → obsidian-vault/dev/
-  - Cross-project rules → CLAUDE.md
+  - Cross-project rules → CLAUDE.md if machine-bound, `~/.claude/rules/behaviour.md` if portable
+    (split 2026-09-29; both load in CC natively and in pi via `claude-context.ts`)
 - [ ] No session-specific context saved to durable docs
 - [ ] **Memory store integrity** — run `python3 ~/.claude/scripts/memcheck.py`. Exit 0 = clean; it validates `name:` == filename stem, description/type present, `[[links]]` resolve, and that MEMORY.md matches disk both ways. Fix anything it reports before finishing (all are mechanical). If a memory was added this session, it also catches a missing index entry.
 - [ ] MEMORY.md is index-only and under 200 lines — one line per memory, no content blocks, and no mirroring of harness-supplied facts (model IDs, tool names) that only go stale
