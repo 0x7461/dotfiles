@@ -1,8 +1,8 @@
 {
   "lastChangelogVersion": "0.80.10",
   "theme": "dark",
-  "defaultProvider": "ollama",
-  "defaultModel": "qwen3-instruct",
+  "defaultProvider": "deepseek",
+  "defaultModel": "deepseek-v4-flash",
   "defaultThinkingLevel": "medium",
   "packages": [
     "npm:pi-mcp-extension"
