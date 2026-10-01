@@ -1,7 +1,7 @@
 #!/bin/sh
 exec 2>&1
 export HOME=/home/ta
-cd /home/ta/projects/archiver
+cd /home/ta/projects/archivist
 
 # Auto-mirror (Phase 4). Opt-in via config `telegram.mirror.auto` — each run no-ops
 # unless auto is on (and the master switch is up) AND items are pending, so posting
@@ -9,4 +9,4 @@ cd /home/ta/projects/archiver
 # window drains whatever accumulated. Posts a small jittered batch (batch_size,
 # gap_min/gap_max) per run. Fires at even hours 08:00-22:00 (8 windows/day).
 exec snooze -H8,10,12,14,16,18,20,22 -M0 -J1800 \
-  /home/ta/projects/archiver/.venv/bin/archiver telegram mirror --auto
+  /home/ta/projects/archivist/.venv/bin/archivist telegram mirror --auto
