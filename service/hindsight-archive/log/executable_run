@@ -1,2 +1,0 @@
-#!/bin/sh
-exec svlogd -tt /home/ta/service/hindsight-archive/log/main

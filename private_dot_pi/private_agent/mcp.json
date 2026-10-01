@@ -14,15 +14,15 @@
       ],
       "lifecycle": "eager"
     },
-    "hindsight": {
+    "chronicler": {
       "transport": "stdio",
       "command": "/usr/bin/uv",
       "args": [
         "run",
         "--project",
-        "/home/ta/projects/hindsight",
+        "/home/ta/projects/chronicler",
         "python",
-        "/home/ta/projects/hindsight/server.py"
+        "/home/ta/projects/chronicler/server.py"
       ],
       "lifecycle": "eager"
     }

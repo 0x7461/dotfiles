@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 // Port of CC's audit-commands.sh hook: every bash command the agent runs is appended to the
 // same log, in the same "[YYYY-MM-DD HH:MM:SS] cmd" format (local time), before it executes.
-// hindsight archives this file as its `cmdlog` source and /recap reads it, so pi commands
+// chronicler archives this file as its `cmdlog` source and /recap reads it, so pi commands
 // stay traceable after the CC cutover. A failed write warns instead of blocking the command.
 const LOG = join(homedir(), ".claude", "command-history.log");
 

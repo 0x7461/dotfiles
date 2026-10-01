@@ -1,6 +1,6 @@
 #!/bin/sh
 exec 2>&1
 export PATH="/home/ta/.local/bin:$PATH"
-cd /home/ta/projects/hindsight
+cd /home/ta/projects/chronicler
 # Fires every Saturday 10:00; scheduled.py gates to bi-weekly (>=13d since last run).
-exec snooze -w6 -H10 -M0 /home/ta/projects/hindsight/bin/hindsight-review
+exec snooze -w6 -H10 -M0 /home/ta/projects/chronicler/bin/chronicler-review
