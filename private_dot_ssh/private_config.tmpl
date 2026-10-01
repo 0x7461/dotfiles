@@ -25,7 +25,7 @@ Host nas
 # Fallback 1: LAN IPv4. DHCP lease again as of 2026-08-10 -- the static config lived in
 # /etc/network/interfaces on the root SSD, which died, and the reinstall took a plain
 # lease (there is no router reservation; no admin access). So this CAN drift again.
-# History: .13 -> .30 (DHCP) -> .250 (static) -> .15 (DHCP).
+# History: .13 -> .30 (DHCP) -> .250 (static) -> .15 -> .14 (DHCP, after the 2026-09 power cut).
 # If it stops answering, find the box by MAC: nmap -sn 192.168.1.0/24 then
 # `ip neigh | grep {{ .nasMac }}`. Prefer `nas` (tailnet) or nas-link-local.
 Host nas-lan
