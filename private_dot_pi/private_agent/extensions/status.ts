@@ -35,7 +35,7 @@ const DEEPSEEK_PEAK: Record<string, { hit: number; miss: number; out: number }> 
 	"deepseek-v4-pro": { hit: 0.044, miss: 1.32, out: 3.96 },
 };
 const DEEPSEEK_KEY = join(HOME, ".config", "deepseek", "key");
-const NAGGER_CONFIG = join(HOME, ".config", "botkit", "nagger.json"); // spend_quota_usd (exit-map §6)
+const NAGGER_CONFIG = join(HOME, ".config", "guild", "nagger.json"); // spend_quota_usd (exit-map §6)
 const BALANCE_TTL_MS = 60_000;
 
 // Peak: 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday. Chinese public holidays are

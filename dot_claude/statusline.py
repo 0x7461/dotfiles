@@ -112,7 +112,7 @@ def git_state(cwd):
 def write_nagger_cache(rl):
     """Mirror the rate limits to nagger's pace cache.
 
-    botkit's nagger reads ~/.local/share/nagger/rate-limits.json. Only write when a
+    guild's nagger reads ~/.local/share/nagger/rate-limits.json. Only write when a
     rate_limits field is actually present: a genuine 0% must still write, but missing
     fields must preserve the last good reading. Skipped where ~/.local/share does not
     exist, which is how this stays a no-op on the work machine.

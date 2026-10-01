@@ -1,4 +1,4 @@
 #!/bin/sh
 exec 2>&1
-cd /home/ta/projects/botkit
+cd /home/ta/projects/guild
 exec snooze -H8-22 -M0 ./bin/nagger

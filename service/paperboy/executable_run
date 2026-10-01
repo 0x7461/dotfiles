@@ -1,6 +1,6 @@
 #!/bin/sh
 exec 2>&1
-cd /home/ta/projects/botkit
+cd /home/ta/projects/guild
 
 # Fires daily at 18:00, but only Mon + Fri actually send.
 #
@@ -14,4 +14,4 @@ cd /home/ta/projects/botkit
 # 18:00 not noon: measured activity is evening-weighted (17:00-01:00 local).
 # Friday not Saturday: scout already delivers Sat 09:00; keep them apart.
 exec snooze -H18 -M0 \
-  sh -c 'case $(date +%u) in 1|5) m=deliver ;; *) m=curate ;; esac; exec /home/ta/projects/botkit/bin/paperboy -mode="$m"'
+  sh -c 'case $(date +%u) in 1|5) m=deliver ;; *) m=curate ;; esac; exec /home/ta/projects/guild/bin/paperboy -mode="$m"'
