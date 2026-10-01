@@ -126,7 +126,7 @@ delete this section.
 - [ ] **pi used this session?** Note anything pi missed that CC follows (a rule, the output
   style, a memory). pi reads the store once per session, so edits apply next session.
 - [ ] **After 2026-10-05:** `git -C ~/projects/ithaca log --oneline --grep 'Weekly snapshot' -1`
-  shows a W41+ commit — the memory-snapshot service's commit path works inside ithaca.
+  shows a W41+ commit — the ithaca-snapshot service's commit path works inside ithaca.
 
 ## Session end (replaces save-learnings)
 
