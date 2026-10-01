@@ -1,8 +1,8 @@
 #!/bin/sh
 exec 2>&1
 export HOME=/home/ta
-# Lets agent-browser's circuit breaker push an ntfy on a logged-out/blocked session.
-export AGENT_BROWSER_NTFY_URL="https://ntfy.sh/0x7461-archiver-nqypecogg2uail2f5xwq"
+# Lets smuggler's circuit breaker push an ntfy on a logged-out/blocked session.
+export SMUGGLER_NTFY_URL="https://ntfy.sh/0x7461-archiver-nqypecogg2uail2f5xwq"
 # runsv starts us with cwd = the service dir; capture it before cd-ing away so
 # the path survives the move from service-staging into ~/service/.
 SVDIR="$(pwd)"

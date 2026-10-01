@@ -3,16 +3,27 @@
     "requestTimeoutMs": 120000
   },
   "mcpServers": {
-    "agent-browser": {
+    "smuggler": {
       "transport": "stdio",
       "command": "/usr/bin/uv",
-      "args": ["run", "--project", "/home/ta/projects/agent-browser", "agent-browser-mcp"],
+      "args": [
+        "run",
+        "--project",
+        "/home/ta/projects/smuggler",
+        "smuggler-mcp"
+      ],
       "lifecycle": "eager"
     },
     "hindsight": {
       "transport": "stdio",
       "command": "/usr/bin/uv",
-      "args": ["run", "--project", "/home/ta/projects/hindsight", "python", "/home/ta/projects/hindsight/server.py"],
+      "args": [
+        "run",
+        "--project",
+        "/home/ta/projects/hindsight",
+        "python",
+        "/home/ta/projects/hindsight/server.py"
+      ],
       "lifecycle": "eager"
     }
   }
