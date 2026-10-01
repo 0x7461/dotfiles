@@ -54,7 +54,7 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   git ls-files --others --exclude-standard | grep -iE '\.(bak|env|key|pem|cookies)|password|secret|credential|\.db-(shm|wal)$|\.v[0-9]+\.bak$'
   ```
   If hits: add the right glob to `.gitignore` BEFORE the next `git add`.
-- [ ] **PLAN.md History vs `git log` drift** — if PLAN claims a phase/feature shipped on date X but `git log --since=X` is empty (or `git log --grep=<phase>` returns nothing), the doc is lying. Flag for the user. ⚠ **Give `--since` a time.** A bare date is midnight **UTC**, so in UTC+7 it drops every commit made before 07:00 that day — an entry written for *today* then reads as a lie against a truthful doc. Use `--since="${X}T00:00"` (confirmed 2026-10-01: bare `--since=2026-10-01` matched nothing, `T00:00` matched all three).
+- [ ] **PLAN.md History vs `git log` drift** — if PLAN claims a phase/feature shipped on date X but `git log --since=X` is empty (or `git log --grep=<phase>` returns nothing), the doc is lying. Flag for the user. ⚠ **Give `--since` a time.** git reads a bare date as that day **at the current time of day** (`git rev-parse --since=2026-10-01` → `11:56` when run at 11:56), so it drops every commit made earlier that day — an entry written for *today* then reads as a lie against a truthful doc. Use `--since="${X}T00:00"` (2026-10-01: bare matched none of vxpm's three morning commits, `T00:00` matched all three).
 - [ ] **Long-lived branch with stale dirty tree** — if on a non-main branch with uncommitted changes for >3 days, suggest stashing or committing.
 
 ## After config/system changes
