@@ -1,0 +1,16 @@
+#!/bin/sh
+exec 2>&1
+export HOME=/home/ta
+# Lets agent-browser's circuit breaker push an ntfy on a logged-out/blocked session.
+export AGENT_BROWSER_NTFY_URL="https://ntfy.sh/0x7461-archiver-nqypecogg2uail2f5xwq"
+# runsv starts us with cwd = the service dir; capture it before cd-ing away so
+# the path survives the move from service-staging into ~/service/.
+SVDIR="$(pwd)"
+cd /home/ta/projects/archiver
+
+# P6 Instagram account archiving. Once daily (random hour 02:00-05:00, 30min
+# jitter), NO startup catch-up — every run is real activity on the live IG
+# account (mirrors archiver-discover). The scheduled slot runs sync.sh, which
+# health-gates the session, runs the sync, and parks on a block.
+exec snooze -R3h -H2 -M0 -J1800 \
+  "$SVDIR/sync.sh"

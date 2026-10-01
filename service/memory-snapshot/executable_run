@@ -1,0 +1,6 @@
+#!/bin/sh
+exec 2>&1
+export PATH="/home/ta/.local/bin:$PATH"
+# Wide daily window + ISO-week dedup inside the script: a weekly -w window
+# would be skipped entirely if the laptop were off that day.
+exec snooze -H 9-22 -M 0 /home/ta/.claude/scripts/memory-snapshot.sh

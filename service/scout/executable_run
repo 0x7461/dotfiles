@@ -1,0 +1,11 @@
+#!/bin/sh
+exec 2>&1
+# summarize (npm, `#!/usr/bin/env node`) needs mise's node; ~/.local/bin holds summarize + claude
+export PATH="/home/ta/.local/share/mise/shims:/home/ta/.local/bin:$PATH"
+cd /home/ta/projects/botkit
+
+# Wait until Saturday at 09:00
+# -w6 = Saturday (0=Sunday, 6=Saturday)
+# -H9 = 9 AM, -M0 = minute 0
+exec snooze -w6 -H9 -M0 \
+  /home/ta/projects/botkit/bin/scout

@@ -1,0 +1,19 @@
+#!/bin/sh
+exec 2>&1
+export HOME=/home/ta
+cd /home/ta/projects/archiver
+
+# Weekly FB highlights auto-discovery (Mon ~05:00 local, 30min jitter), after the
+# nightly full-sync window. Browse-only; auto-adds newly-found buckets to
+# account_highlights. NO startup catch-up on purpose — never browse FB except on
+# the scheduled slot (each run is real activity on the live account). Uses
+# `uv run --extra discovery` so the camoufox extra is guaranteed present even if
+# a plain `uv sync` later strips it from the venv.
+#
+# The Playwright driver guard is re-applied inside `uv run`, after its sync: any
+# reinstall of the driver reverts it, and the unguarded driver dies on the first
+# location-less FB page error (every run 2026-08-16 to 09-13; the guard was lost
+# again in the 2026-09-28 Python 3.14 venv rebuild). Idempotent, no network; exits
+# 1 with a message if upstream changed the code it patches.
+exec snooze -w 1 -H5 -M0 -J1800 \
+  uv run --extra discovery sh -c 'python scripts/patch_playwright_driver.py && exec archiver facebook discover-highlights'

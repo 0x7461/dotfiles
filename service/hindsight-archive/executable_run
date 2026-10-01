@@ -1,0 +1,11 @@
+#!/bin/sh
+exec 2>&1
+export PATH="/home/ta/.local/bin:$PATH"
+cd /home/ta/projects/hindsight
+# -t + -s 1d: a 03:30 slot missed while the laptop was off fires on next start
+# instead of waiting a day. The job touches the timefile before running, so a
+# failed run waits for the next slot rather than looping.
+tf=/home/ta/.local/state/snooze/hindsight-archive
+mkdir -p "${tf%/*}"
+exec snooze -t "$tf" -s 1d -H3 -M30 \
+  sh -c 'touch "$1" && exec /home/ta/projects/hindsight/bin/hindsight-archive' sh "$tf"

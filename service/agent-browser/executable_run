@@ -1,0 +1,7 @@
+#!/bin/sh
+exec 2>&1
+export HOME=/home/ta
+# Shared Alerts topic (see ~/obsidian-vault/system/notifications.md). auth.warn() pushes here.
+export AGENT_BROWSER_NTFY_URL="https://ntfy.sh/0x7461-archiver-nqypecogg2uail2f5xwq"
+cd /home/ta/projects/agent-browser
+exec uv run agent-browser
