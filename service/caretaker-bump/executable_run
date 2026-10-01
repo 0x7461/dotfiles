@@ -1,10 +1,10 @@
 #!/bin/sh
 export PATH="/home/ta/.local/bin:$PATH"
-cd /home/ta/projects/maint-watch
+cd /home/ta/projects/caretaker
 # -t + -s 1d: a 04:00 slot missed while the laptop was off fires on next start
 # instead of waiting a day. The job touches the timefile before running, so a
 # failed run waits for the next slot rather than looping.
-tf=/home/ta/.local/state/snooze/vxpm-bumper
+tf=/home/ta/.local/state/snooze/caretaker-bump
 mkdir -p "${tf%/*}"
 exec snooze -t "$tf" -s 1d -H4 -M0 \
-  sh -c 'touch "$1" && exec uv run python -m maint_watch.vxpm_bumper' sh "$tf" 2>&1
+  sh -c 'touch "$1" && exec uv run python -m caretaker.bump' sh "$tf" 2>&1

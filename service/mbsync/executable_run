@@ -6,7 +6,7 @@
 #   mkdir -p ~/service/mbsync
 #   cp ~/.config/mbsync/mbsync.run ~/service/mbsync/run
 #   chmod +x ~/service/mbsync/run
-#   install -m 755 ~/projects/maint-watch/service-hooks/finish ~/service/mbsync/finish
+#   install -m 755 ~/projects/caretaker/service-hooks/finish ~/service/mbsync/finish
 #   # runsv auto-discovers it and starts syncing every 15 min.
 #   # Pause with:  SVDIR=~/service sv down mbsync
 #
@@ -14,7 +14,7 @@
 # runs the command once and exits, so runsv restarts per cycle and the `finish`
 # hook records each run's exit status. A loop that never exits can never fire
 # `finish`, so a sync failing every 15 minutes was completely invisible — new
-# mail would simply stop arriving with nothing to say so. maint-watch reported
+# mail would simply stop arriving with nothing to say so. caretaker (then maint-watch) reported
 # it UNREPORTABLE.
 #
 # `sh -c` because the exit status must reflect both halves: a successful pull

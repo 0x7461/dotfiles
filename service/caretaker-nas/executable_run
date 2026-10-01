@@ -1,8 +1,8 @@
 #!/bin/sh
 exec 2>&1
 export PATH="/home/ta/.local/bin:$PATH"
-cd /home/ta/projects/maint-watch
+cd /home/ta/projects/caretaker
 # Off-box liveness probe for the NAS, which can't report its own death. Every
 # hour at :17 while the laptop is up; no catch-up timefile, since a missed probe
 # has nothing to catch up on.
-exec snooze -H '*' -M 17 uv run python -m maint_watch.nas_liveness
+exec snooze -H '*' -M 17 uv run python -m caretaker.nas_liveness

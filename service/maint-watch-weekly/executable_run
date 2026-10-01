@@ -1,4 +1,0 @@
-#!/bin/sh
-export PATH="/home/ta/.local/bin:$PATH"
-cd /home/ta/projects/maint-watch
-exec snooze -w 6 -H 9 -M 0 uv run python -m maint_watch scan 2>&1

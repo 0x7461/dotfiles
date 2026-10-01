@@ -6,7 +6,7 @@ Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 **Last reviewed:** 2026-09-18 (added the pre-check-before-remediation section after walking into the Camoufox lock trap a second time, plus the output-styles and two-owner config checks)
 **Last CC cleanup:** 2026-09-24 (memcheck clean at 82; CLAUDE.md 112/200 lines; MEMORY.md 98 lines / 14,635 bytes)
 
-> **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[maint-watch]] (`~/projects/maint-watch/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
+> **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[caretaker]] (`~/projects/caretaker/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
 ---
 
@@ -85,11 +85,11 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 - [ ] Run script matches current binary/config paths
 - [ ] **snooze spec verified before install** — `snooze -v <spec> true` prints the next fire time. An unspecified field defaults to `0`, not "any", so `-M/15` means "every 15th minute *of hour 0*" and silently parks the service until midnight. Cost a parked `mbsync` on 2026-08-02; `sv status` read `run` the whole time.
 - [ ] **`snooze -t` only together with a job that touches the timefile.** snooze never writes it; an untouched `-t` file re-fires a slot the job finished inside its first 60s (mbsync ran ~4×/window, archiver-mirror twice, until 2026-09-28). Catch-up wanted → `-t ~/.local/state/snooze/<name> -s <cadence>` + `sh -c 'touch "$1" && exec <job>' sh "$tf"`; no catch-up → no `-t` at all. Pattern: `~/obsidian-vault/system/services.md` late-boot gotcha.
-- [ ] **Scheduled (snooze) service has a `finish` hook** — `install -m 755 ~/projects/maint-watch/service-hooks/finish ~/service/<name>/finish`. Without it a job failing every run reads `OK`, because the supervised process is the scheduler, not the job.
+- [ ] **Scheduled (snooze) service has a `finish` hook** — `install -m 755 ~/projects/caretaker/service-hooks/finish ~/service/<name>/finish`. Without it a job failing every run reads `OK`, because the supervised process is the scheduler, not the job.
 - [ ] Log directory exists (`log/main/` for svlogd)
-- [ ] **Service actually *ran*, not just "is up"** — `sv status` reports the scheduler. Confirm a real outcome: `awk '!($1==-1 && $2==15)' ~/.cache/maint-watch/runs/<name>` (that filter drops `sv restart`s, which are recorded as SIGTERM and are not job runs).
+- [ ] **Service actually *ran*, not just "is up"** — `sv status` reports the scheduler. Confirm a real outcome: `awk '!($1==-1 && $2==15)' ~/.cache/caretaker/runs/<name>` (that filter drops `sv restart`s, which are recorded as SIGTERM and are not job runs).
 - [ ] .env file has all required vars
-- [ ] **`## Services` declaration** — if a project owns the service, its AGENTS.md `## Services` block declares it (`persistent` = up + survives reboot) **with a cadence** (`persistent, every 6h`) if it is scheduled; without one, a service that stops firing altogether reads `OK` forever. Declare the longest *normal* gap, not the nominal interval — a job running hourly but only 08:00–22:00 has a 10-hour legitimate overnight gap. Run `maint-watch doctor` to reconcile declared vs actual; a leftover `down` sentinel on a persistent service means it silently parks on the next reboot.
+- [ ] **`## Services` declaration** — if a project owns the service, its AGENTS.md `## Services` block declares it (`persistent` = up + survives reboot) **with a cadence** (`persistent, every 6h`) if it is scheduled; without one, a service that stops firing altogether reads `OK` forever. Declare the longest *normal* gap, not the nominal interval — a job running hourly but only 08:00–22:00 has a 10-hour legitimate overnight gap. Run `caretaker doctor` to reconcile declared vs actual; a leftover `down` sentinel on a persistent service means it silently parks on the next reboot.
 
 ## After botkit changes
 

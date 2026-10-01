@@ -1,0 +1,4 @@
+#!/bin/sh
+exec 2>&1
+# Laptop vitals watcher (was bellman). Plain sh + curl; see caretaker AGENTS.md.
+exec /home/ta/projects/caretaker/vitals.sh
