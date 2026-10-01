@@ -1,6 +1,6 @@
 #!/bin/sh
 exec 2>&1
-cd /home/ta/projects/librechat
+cd /home/ta/projects/closed/librechat
 
 # Start from a clean slate. A previous failed cycle (e.g. a hard crash) can
 # leave the stack half-dead in ways `up -d` won't repair on its own:

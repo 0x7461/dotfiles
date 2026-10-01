@@ -1,5 +1,5 @@
 // niri config — sole Wayland compositor since 2026-05-23 (Hyprland removed).
-// See ~/projects/niri/PLAN.md for migration history.
+// See ~/projects/infra/niri/PLAN.md for migration history.
 
 // Reference: https://github.com/niri-wm/niri/wiki/Configuration
 
