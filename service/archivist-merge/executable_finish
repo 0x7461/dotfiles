@@ -1,0 +1,27 @@
+#!/bin/sh
+# caretaker run-outcome hook — install as ~/service/<name>/finish (chmod +x).
+#
+# runsv executes ./finish after ./run exits, with $1 = the exit code (-1 if the
+# process was signalled) and $2 = the signal number. For the snooze-wrapped
+# services that is once per scheduled job: snooze waits for its window, runs the
+# command, exits, and runsv restarts the service. Without this, `sv status` only
+# ever reports that the *scheduler* is alive — archiver-mirror crash-looped 27
+# times over 3 days while doctor read OK.
+#
+# Identical for every service: runsv sets cwd to the service dir, so the name is
+# just the basename. Copy verbatim.
+#
+# Keep this fast — runsv waits for ./finish before restarting the service.
+
+# Format: "<exit-code> <signal> <iso-8601-utc>". The signal matters — `sv down`
+# and `sv restart` terminate ./run with SIGTERM, which arrives here as exit -1
+# and would otherwise log a phantom failure every time a service is restarted by
+# hand. caretaker treats (-1, 15) as a deliberate stop, not a failed run.
+d="${HOME:-/home/ta}/.cache/caretaker/runs"
+n=$(basename "$(pwd)")
+mkdir -p "$d" || exit 0
+printf '%s %s %s\n' "$1" "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$d/$n"
+
+# Cap the file — only the trailing streak is ever read.
+tail -n 50 "$d/$n" > "$d/$n.tmp" 2>/dev/null && mv "$d/$n.tmp" "$d/$n"
+exit 0
