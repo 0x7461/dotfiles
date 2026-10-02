@@ -12,4 +12,4 @@ cd /home/ta/projects/archivist
 STAMP=/home/ta/.local/share/archivist/merge/last-round
 mkdir -p /home/ta/.local/share/archivist/merge
 exec snooze -H7,19 -M0 -s 12h -J1800 -t "$STAMP" \
-  sh -c '/home/ta/projects/archivist/.venv/bin/archivist merge --alert; rc=$?; touch "$0"; exit $rc' "$STAMP"
+  sh -c '/home/ta/projects/archivist/.venv/bin/archivist merge --apply --alert; rc=$?; touch "$0"; exit $rc' "$STAMP"
