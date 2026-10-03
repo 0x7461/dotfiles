@@ -4,7 +4,5 @@
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-v4-flash",
   "defaultThinkingLevel": "medium",
-  "packages": [
-    "npm:pi-mcp-extension"
-  ]
+  "packages": []
 }
