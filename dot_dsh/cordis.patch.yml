@@ -1,5 +1,6 @@
-# Machine-wide privacy overrides (every profile). Written 2026-10-03.
-# Stop uploading the full session log (dsh_session_log field, up to 8 MiB per request)
+# Machine-wide overrides (every profile). Written 2026-10-03; ithaca agent_docs/trial-harnesses.md.
+
+# Privacy. Stop uploading the full session log (dsh_session_log field, up to 8 MiB per request)
 # to the official DeepSeek API; the model still gets its normal context.
 - id: session-log-deepseek
   config:
@@ -7,3 +8,29 @@
 # Remove the OTLP session telemetry plugin (same patch DSH_TELEMETRY_DISABLED generates).
 - id: session-telemetry-otel
   disabled: true
+
+# ithaca store. ~/.dsh/AGENTS.md is the store context (~47 KB), rebuilt by the `dsh` fish
+# function. The budget covers it plus the project chain; at the default 65,536 a project
+# AGENTS.md pushes it over, and the broadest file (the store) would be dropped whole.
+- id: agent-instructions
+  config:
+    maxBytes: 131072
+
+# MCP servers, the same two every harness gets. Skills need nothing: dsh scans ~/.agents/skills.
+- insert:
+    - id: mcp-smuggler
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: smuggler
+        transport: stdio
+        command: /usr/bin/uv
+        args: [run, --project, /home/ta/projects/smuggler, smuggler-mcp]
+        toolCallTimeoutMs: 120000
+    - id: mcp-chronicler
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: chronicler
+        transport: stdio
+        command: /usr/bin/uv
+        args: [run, --project, /home/ta/projects/chronicler, python, /home/ta/projects/chronicler/server.py]
+        toolCallTimeoutMs: 120000
