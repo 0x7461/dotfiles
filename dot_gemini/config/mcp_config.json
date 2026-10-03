@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "chronicler": {
+      "args": [
+        "run",
+        "--project",
+        "/home/ta/projects/chronicler",
+        "python",
+        "/home/ta/projects/chronicler/server.py"
+      ],
+      "command": "/usr/bin/uv",
+      "disabled": false
+    },
+    "smuggler": {
+      "args": [
+        "run",
+        "--project",
+        "/home/ta/projects/smuggler",
+        "smuggler-mcp"
+      ],
+      "command": "/usr/bin/uv",
+      "disabled": false
+    }
+  }
+}

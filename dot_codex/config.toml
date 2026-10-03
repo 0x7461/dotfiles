@@ -1,0 +1,28 @@
+# Codex CLI — trial lane (ithaca, 2026-10-03). Auth lives in auth.json (codex login), never here.
+# Global instructions: ~/.codex/AGENTS.md is rebuilt from the ithaca store by the `codex` fish
+# function (~/.agents/scripts/compose-context.py). The store context is ~47 KB, over the 32 KiB
+# default read limit, so raise it.
+project_doc_max_bytes = 65536
+
+# No telemetry (house rule; same reason gh is avoided).
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[otel]
+exporter = "none"
+trace_exporter = "none"
+
+[mcp_servers.smuggler]
+command = "/usr/bin/uv"
+args = ["run", "--project", "/home/ta/projects/smuggler", "smuggler-mcp"]
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+[mcp_servers.chronicler]
+command = "/usr/bin/uv"
+args = ["run", "--project", "/home/ta/projects/chronicler", "python", "/home/ta/projects/chronicler/server.py"]
+startup_timeout_sec = 60
+tool_timeout_sec = 120

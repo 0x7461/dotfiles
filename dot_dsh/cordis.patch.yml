@@ -1,0 +1,9 @@
+# Machine-wide privacy overrides (every profile). Written 2026-10-03.
+# Stop uploading the full session log (dsh_session_log field, up to 8 MiB per request)
+# to the official DeepSeek API; the model still gets its normal context.
+- id: session-log-deepseek
+  config:
+    enabled: false
+# Remove the OTLP session telemetry plugin (same patch DSH_TELEMETRY_DISABLED generates).
+- id: session-telemetry-otel
+  disabled: true
