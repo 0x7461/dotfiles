@@ -3,7 +3,7 @@
     "deepseek": {
       "baseUrl": "https://api.deepseek.com",
       "api": "openai-completions",
-      "apiKey": "!tr -d '[:space:]' < /home/ta/.config/deepseek/key",
+      "apiKey": "!tr -d '[:space:]' < /home/ta/.config/deepseek/key_void",
       "models": [
         {
           "id": "deepseek-v4-pro",

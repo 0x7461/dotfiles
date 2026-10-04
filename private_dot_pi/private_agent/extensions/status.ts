@@ -34,7 +34,7 @@ const DEEPSEEK_PEAK: Record<string, { hit: number; miss: number; out: number }> 
 	"deepseek-v4-flash": { hit: 0.006, miss: 0.3, out: 1.2 },
 	"deepseek-v4-pro": { hit: 0.044, miss: 1.32, out: 3.96 },
 };
-const DEEPSEEK_KEY = join(HOME, ".config", "deepseek", "key");
+const DEEPSEEK_KEY = join(HOME, ".config", "deepseek", "key_void");
 const NAGGER_CONFIG = join(HOME, ".config", "guild", "nagger.json"); // spend_quota_usd (exit-map §6)
 const BALANCE_TTL_MS = 60_000;
 
