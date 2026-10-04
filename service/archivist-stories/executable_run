@@ -11,9 +11,9 @@ row = sqlite3.connect('/home/ta/.local/share/archivist/archivist.db').execute(\"
 last = row[0]
 if not last: sys.exit(0)
 sys.exit(0 if datetime.now(timezone.utc) - datetime.fromisoformat(last) > timedelta(hours=16) else 1)
-" && /home/ta/projects/archivist/.venv/bin/archivist sync --stories-only
+" && /home/ta/projects/archivist/.venv/bin/archivist sync --only stories
 
 # Run twice daily (every 12h) at random times with 30min jitter
 # Stories expire in 24h — checking every 12h gives comfortable margin
 exec snooze -H/12 -M0 -J1800 \
-  /home/ta/projects/archivist/.venv/bin/archivist sync --stories-only
+  /home/ta/projects/archivist/.venv/bin/archivist sync --only stories

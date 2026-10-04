@@ -24,7 +24,7 @@ if [ "$rc" -ne 0 ]; then
 fi
 
 # Conservative: 20 new posts/account/day across followed IG accounts.
-uv run --extra discovery archivist instagram sync --following --limit 20
+uv run --extra discovery archivist instagram archive following --limit 20
 rc=$?
 if [ "$rc" -eq 2 ]; then
     echo "sync exit=2 (session blocked mid-run) at $(date -u +%FT%TZ)" > "$PAUSE"
