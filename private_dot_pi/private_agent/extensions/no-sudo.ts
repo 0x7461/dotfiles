@@ -7,7 +7,9 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 // A guardrail, not a wall. It cannot catch: a command word only known at runtime (`$(echo sudo) x`,
 // `$VAR`), a script it only names (`bash setup.sh`), an interpreter (`python -c`), an alias, ANSI-C
 // quoting ($'...'), an escaped quote inside a command substitution, a `<<` inside a comment or quoted
-// string, a leading redirection (`2>/dev/null sudo x`), `command` before the command, or a launcher it
+// string, a leading redirection (`2>/dev/null sudo x`), `command` before the command, a launcher's
+// long option (`timeout --signal=KILL 5 sudo x`), an assignment holding a substitution before the
+// command (`x=$(date) sudo ls`), or a launcher it
 // does not know (systemd-run, nsenter, docker exec, stdbuf, watch, parallel, flock, busybox, chrt,
 // taskset, ionice, mosh); and it ignores the powershell tool. It can over-block a shell function
 // named sudo.
