@@ -1,13 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 // Blocks the agent's tool calls that would read private files while the session's model is not
 // private. A blocked read never reaches the provider, so PII and secrets stay off DeepSeek, Go and
 // any other provider that trains on or retains inputs. Fails closed: an unknown provider, or no
-// model at all, counts as not private. A guardrail against accidents, not a wall: a shell command
-// can still reach a private file indirectly (a recursive grep from $HOME, a glob, a script).
+// model at all, counts as not private. A guardrail against accidents, not a wall: a glob, a path
+// built in a shell variable, or a script can still reach a private file indirectly.
 const HOME = homedir();
 
 // Providers whose requests stay on this machine.
@@ -27,11 +27,13 @@ const PRIVATE_ROOTS = [
 	".config/chezmoi/chezmoi.toml",
 ].map((p) => join(HOME, p));
 
+// Resolve the deepest existing ancestor when the leaf is absent, which is normal for write, so a
+// symlink into a private root still counts. realpathSync throws only when a component is missing.
 function real(path: string): string {
 	try {
 		return realpathSync(path);
 	} catch {
-		return path;
+		return join(real(dirname(path)), basename(path));
 	}
 }
 
@@ -44,7 +46,7 @@ function within(path: string, root: string): boolean {
 
 function absolute(path: string, cwd: string): string {
 	const expanded = path === "~" ? HOME : path.startsWith("~/") ? join(HOME, path.slice(2)) : path;
-	return real(isAbsolute(expanded) ? expanded : resolve(cwd, expanded));
+	return real(resolve(cwd, expanded));
 }
 
 // The root a path falls inside, or, for a recursive search, the root it would descend into.
@@ -57,22 +59,84 @@ function escape(s: string): string {
 }
 
 const BEFORE = `(^|[\\s'"=:(<>|;&])`;
+// A root may be followed by a path separator; a directory above a root only by a separator that
+// ends the name, so "~/projects" is not the HOME ancestor.
+const ROOT_AHEAD = `(?=$|[/\\s'"*;&|)])`;
+const ANCESTOR_AHEAD = `(?=/?$|/?[\\s'"=:(<>|;&*])`;
 
-// A root as a shell command could spell it: absolute, ~/, $HOME/ or ${HOME}/, or relative to the
-// working directory when the root sits below it. A relative spelling needs a "/" after it or a
-// "./" before it, so the bare word in a commit message ("finance round") does not match.
+// Every way a shell could spell a path under $HOME: literal, ~, $HOME and ${HOME}, quoted around
+// the variable only.
+function spellings(path: string): string[] {
+	const rel = relative(HOME, path);
+	if (rel === "") return [path, "~", "$HOME", "${HOME}", '"$HOME"', '"${HOME}"', "'$HOME'", "'${HOME}'"];
+	return [
+		path,
+		`~/${rel}`,
+		`$HOME/${rel}`,
+		`\${HOME}/${rel}`,
+		`"$HOME"/${rel}`,
+		`"\${HOME}"/${rel}`,
+		`'$HOME'/${rel}`,
+		`'\${HOME}'/${rel}`,
+	];
+}
+
+// Directories above a private root. A recursive command that names one descends into the root.
+function ancestorsOf(root: string): string[] {
+	const parts = relative(HOME, root).split(sep).slice(0, -1);
+	const dirs = parts.map((_, i) => join(HOME, ...parts.slice(0, i + 1)));
+	return dirs.flatMap(spellings).concat(spellings(HOME));
+}
+
+const ROOT_PATTERNS = ROOTS.map((root) => ({
+	root,
+	own: spellings(root).map((s) => new RegExp(`${BEFORE}${escape(s)}${ROOT_AHEAD}`)),
+	above: ancestorsOf(root).map((s) => new RegExp(`${BEFORE}${escape(s)}${ANCESTOR_AHEAD}`)),
+}));
+
+const RECURSIVE_VERB = /(^|[\s|;&(])(rg|find|tar|rsync|du|tree)(\s|$)/;
+const RECURSIVE_FLAG = /(^|[\s|;&(])(grep|cp|mv)\s+[^|;&]*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$)/;
+
+function recursiveCommand(command: string): boolean {
+	return RECURSIVE_VERB.test(command) || RECURSIVE_FLAG.test(command);
+}
+
+// Text outside single and double quotes, so a relative name in a commit message is not a path.
+function unquoted(command: string): string {
+	return command.replace(/"[^"]*"|'[^']*'/g, " ");
+}
+
+function anyMatch(command: string, patterns: RegExp[]): boolean {
+	return patterns.some((re) => re.test(command));
+}
+
+// A directory above a root, spelled relative to a working directory that contains it. Like the
+// relative root form, it needs a "/" after it or a "./" before it, so a bare word does not match.
+function relativeAncestor(command: string, cwd: string, root: string): boolean {
+	const bare = unquoted(command);
+	const parts = relative(HOME, root).split(sep).slice(0, -1);
+	return parts.some((_, i) => {
+		const dir = join(HOME, ...parts.slice(0, i + 1));
+		if (!within(dir, cwd) || dir === cwd) return false;
+		const rel = escape(relative(cwd, dir));
+		return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ANCESTOR_AHEAD}`).test(bare);
+	});
+}
+
+// A root as a shell command could spell it, or, for a recursive command, a directory above one.
+// The relative forms are matched outside quotes, so a bare name in a message does not match.
 function rootInCommand(command: string, cwd: string): string | undefined {
-	return ROOTS.find((root) => {
-		const full = [root];
-		if (within(root, HOME)) {
-			const rel = relative(HOME, root);
-			full.push(`~/${rel}`, `$HOME/${rel}`, `\${HOME}/${rel}`);
-		}
-		if (full.some((s) => new RegExp(`${BEFORE}${escape(s)}(?=$|[/\\s'"*;&|)])`).test(command))) return true;
+	const normalized = command.replace(/\/\.\//g, "/").replace(/\/{2,}/g, "/");
+	const bare = unquoted(normalized);
+	const recursive = recursiveCommand(normalized);
+	return ROOT_PATTERNS.find(({ root, own, above }) => {
+		if (anyMatch(normalized, own)) return true;
+		if (recursive && anyMatch(normalized, above)) return true;
+		if (recursive && relativeAncestor(normalized, cwd, root)) return true;
 		if (!within(root, cwd) || root === cwd) return false;
 		const rel = escape(relative(cwd, root));
-		return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}(?=$|[/\\s'"*;&|)])`).test(command);
-	});
+		return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ROOT_AHEAD}`).test(bare);
+	})?.root;
 }
 
 export function blockedRoot(toolName: string, input: Record<string, unknown>, cwd: string): string | undefined {
