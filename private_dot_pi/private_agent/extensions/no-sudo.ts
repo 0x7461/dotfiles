@@ -633,7 +633,7 @@ function escalates(words: Word[]): string | undefined {
 }
 
 function escalationInString(source: string): string | undefined {
-	const tokens = tokenize(source);
+	const tokens = tokenize(blankHeredocs(source));
 	for (const t of tokens) {
 		if (t.kind === "sub") {
 			const e = escalationInString(t.value);
