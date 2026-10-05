@@ -127,7 +127,10 @@ delete this section.
 - [ ] **pi used this session?** Note anything pi missed that CC follows (a rule, the output
   style, a memory). pi reads the store once per session, so edits apply next session.
 - [ ] **After 2026-10-05:** `git -C ~/projects/ithaca log --oneline --grep 'Weekly snapshot' -1`
-  shows a W41+ commit — the ithaca-snapshot service's commit path works inside ithaca.
+  shows a W41+ commit — the ithaca-snapshot service's commit path works inside ithaca. A log line
+  `memory-snapshot: <week> — no changes` (`~/service/ithaca-snapshot/log/main/current`) means it ran
+  and /housekeeping had already committed memory; the commit path stays unproven. W41 did exactly
+  that (2026-10-05). The W40 commit predates the store, so it proves nothing.
 
 ## Session end (replaces save-learnings)
 
