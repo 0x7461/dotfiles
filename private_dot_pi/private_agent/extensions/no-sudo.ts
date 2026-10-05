@@ -6,170 +6,350 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 //
 // A guardrail, not a wall. It cannot catch: a command word only known at runtime (`$(echo sudo) x`,
 // `$VAR`), a script it only names (`bash setup.sh`), an interpreter (`python -c`), an alias, ANSI-C
-// quoting ($'...'), a `<<` inside a comment or quoted string, an escaped quote inside a command
-// substitution, or a launcher it does not know (systemd-run, nsenter, docker exec, stdbuf, watch,
-// parallel, flock, busybox, chrt, taskset, ionice, mosh); and it ignores the powershell tool. It can
-// over-block a shell function named sudo.
+// quoting ($'...'), an escaped quote inside a command substitution, a `<<` inside a comment or quoted
+// string, a leading redirection (`2>/dev/null sudo x`), `command` before the command, or a launcher it
+// does not know (systemd-run, nsenter, docker exec, stdbuf, watch, parallel, flock, busybox, chrt,
+// taskset, ionice, mosh); and it ignores the powershell tool. It can over-block a shell function
+// named sudo.
 
 const ESCALATION = new Set(["sudo", "doas", "pkexec", "su"]);
 const SHELLS = new Set(["sh", "bash", "dash", "zsh", "ksh", "mksh", "csh", "tcsh", "ash", "fish"]);
-const KEYWORDS = new Set(["if", "then", "elif", "else", "while", "until", "do", "!"]);
-const WRAPPERS = new Set(["env", "xargs", "command", "exec", "nohup", "time", "nice", "timeout"]);
-// Options that take a value, so the word after them is not the launched command.
-const VALUES: Record<string, string[]> = {
-	env: ["-u", "--unset", "-C", "--chdir"],
-	xargs: ["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars"],
-	nice: ["-n", "--adjustment"],
-	timeout: ["-k", "--kill-after", "-s", "--signal"],
-	ssh: ["-p", "-i", "-o", "-l", "-P", "-F", "-L", "-R", "-D", "-J", "-b", "-c", "-e", "-m", "-w", "-S", "-Q", "-E", "-I", "-O", "-B", "-W"],
+
+// Words that stand immediately before a command. The value is the short options that take a value, so
+// the word after one is skipped: launchers have some, the shell keywords have none.
+const PREFIXES: Record<string, string> = {
+	env: "uC",
+	xargs: "aEdEILnPs",
+	nice: "n",
+	timeout: "ks",
+	exec: "",
+	nohup: "",
+	time: "",
+	if: "",
+	then: "",
+	elif: "",
+	else: "",
+	while: "",
+	until: "",
+	do: "",
+	"!": "",
 };
-const SEP = "\u0000";
-const SUB = "\u0001";
-function readBacktick(s: string, i: number): [string, number] {
-	const j = s.indexOf("`", i + 1);
-	return j < 0 ? [s.slice(i + 1), s.length] : [s.slice(i + 1, j), j + 1];
+
+// Short options of ssh that take a value, so its host is not mistaken for an option value.
+const SSH_VALUE_OPTS = "piolFRDJbcemwSQEIOBW";
+
+// A word list is separated into commands by this token.
+const SEPARATOR = "\u0000";
+
+// The shell code inside the substitution at source[i], and the index after it.
+function readSubstitution(source: string, i: number): [string, number] {
+	if (source[i] === "`") {
+		const end = source.indexOf("`", i + 1);
+		if (end < 0) {
+			return [source.slice(i + 1), source.length];
+		}
+		return [source.slice(i + 1, end), end + 1];
+	}
+	return scanParen(source, i + 1);
 }
-// Content of a $( ... ) or ( ... ) group, from the index of its "(" to the index after the match.
-function readParen(s: string, open: number): [string, number] {
+
+// Content of a ( ... ) group, from the index of its "(" to the index after the matching one.
+function scanParen(source: string, open: number): [string, number] {
 	let depth = 0;
-	for (let i = open; i < s.length; ) {
-		const c = s[i] as string;
-		if (c === "\\") i += 2;
-		else if (c === "'") { const e = s.indexOf("'", i + 1); i = e < 0 ? s.length : e + 1; }
-		else if (c === '"') { const e = s.indexOf('"', i + 1); i = e < 0 ? s.length : e + 1; }
-		else if (c === "(") { depth++; i++; }
-		else if (c === ")" && --depth === 0) return [s.slice(open + 1, i), i + 1];
-		else i++;
-	}
-	return [s.slice(open + 1), s.length];
-}
-// Split into words: SEP marks a command boundary, SUB+text is a command substitution to scan too.
-function tokenize(s: string): string[] {
-	const out: string[] = [];
-	let cur = "";
-	let has = false;
-	let i = 0;
-	const flush = () => { if (has) out.push(cur); cur = ""; has = false; };
-	const sub = (inner: string) => { flush(); out.push(SUB + inner); };
-	while (i < s.length) {
-		const c = s[i] as string;
-		if (c === "\n") { flush(); out.push(SEP); i++; }
-		else if (/\s/.test(c)) { flush(); i++; }
-		else if (c === "'") { has = true; const e = s.indexOf("'", i + 1); cur += e < 0 ? s.slice(i + 1) : s.slice(i + 1, e); i = e < 0 ? s.length : e + 1; }
-		else if (c === '"') {
-			has = true;
-			for (i++; i < s.length; ) {
-				const d = s[i] as string;
-				if (d === "\\" && '"$`\\'.includes(s[i + 1] ?? "")) { cur += s[i + 1]; i += 2; }
-				else if (d === '"') { i++; break; }
-				else if (d === "$" && s[i + 1] === "(") { const [x, n] = readParen(s, i + 1); sub(x); i = n; }
-				else if (d === "`") { const [x, n] = readBacktick(s, i); sub(x); i = n; }
-				else { cur += d; i++; }
-			}
-		} else if ((c === "$" || c === "<" || c === ">") && s[i + 1] === "(") { const [x, n] = readParen(s, i + 1); sub(x); i = n; }
-		else if (c === "`") { const [x, n] = readBacktick(s, i); sub(x); i = n; }
-		else if (c === "\\") { has = true; if (s[i + 1] !== "\n") cur += s[i + 1] ?? "\\"; i += s[i + 1] === undefined ? 1 : 2; }
-		else if (";&|".includes(c) || ("(){}".includes(c) && !has)) { flush(); out.push(SEP); i++; }
-		else { has = true; cur += c; i++; }
-	}
-	flush();
-	return out;
-}
-// Blank heredoc bodies so their text (often documentation about sudo) is not read as commands.
-// Quote-blind: a `<<` in a comment or quoted string misfires, which can only hide a later command.
-function blankHeredocs(src: string): string {
-	const lines = src.split("\n");
-	let pending: { word: string; tabs: boolean } | undefined;
-	for (let i = 0; i < lines.length; i++) {
-		if (pending) {
-			if ((pending.tabs ? (lines[i] as string).replace(/^\t+/, "") : lines[i]) === pending.word) pending = undefined;
-			else lines[i] = "";
+	let i = open;
+	while (i < source.length) {
+		const char = source[i] as string;
+		if (char === "\\") {
+			i += 2;
 			continue;
 		}
-		const re = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_]\w*)\2/g;
-		for (let m = re.exec(lines[i] as string); m; m = re.exec(lines[i] as string)) pending = { word: m[3] as string, tabs: m[1] === "-" };
+		if (char === "'") {
+			const end = source.indexOf("'", i + 1);
+			i = end < 0 ? source.length : end + 1;
+			continue;
+		}
+		if (char === '"') {
+			const end = source.indexOf('"', i + 1);
+			i = end < 0 ? source.length : end + 1;
+			continue;
+		}
+		if (char === "(") {
+			depth += 1;
+			i += 1;
+			continue;
+		}
+		if (char === ")") {
+			depth -= 1;
+			if (depth === 0) {
+				return [source.slice(open + 1, i), i + 1];
+			}
+			i += 1;
+			continue;
+		}
+		i += 1;
+	}
+	return [source.slice(open + 1), source.length];
+}
+
+// Split a shell fragment into words. SEPARATOR ends a simple command. Quoted text stays one word. A
+// substitution contributes its own tokens, put behind a separator so its first word reads as a command.
+function tokenize(source: string): string[] {
+	const tokens: string[] = [];
+	let current = "";
+	let pending = false;
+	let i = 0;
+	const flush = () => {
+		if (pending) {
+			tokens.push(current);
+		}
+		current = "";
+		pending = false;
+	};
+	const add = (text: string) => {
+		pending = true;
+		current += text;
+	};
+	const addCommand = (inner: string) => {
+		flush();
+		tokens.push(SEPARATOR);
+		for (const token of tokenize(inner)) {
+			tokens.push(token);
+		}
+	};
+	while (i < source.length) {
+		const char = source[i] as string;
+		if (char === "\n") {
+			flush();
+			tokens.push(SEPARATOR);
+			i += 1;
+			continue;
+		}
+		if (/\s/.test(char)) {
+			flush();
+			i += 1;
+			continue;
+		}
+		if (char === "'") {
+			pending = true;
+			const end = source.indexOf("'", i + 1);
+			current += end < 0 ? source.slice(i + 1) : source.slice(i + 1, end);
+			i = end < 0 ? source.length : end + 1;
+			continue;
+		}
+		if (char === '"') {
+			pending = true;
+			i += 1;
+			while (i < source.length) {
+				const inner = source[i] as string;
+				if (inner === "\\" && '"$`\\'.includes(source[i + 1] ?? "")) {
+					add(source[i + 1]);
+					i += 2;
+					continue;
+				}
+				if (inner === '"') {
+					i += 1;
+					break;
+				}
+				if (inner === "`" || (inner === "$" && source[i + 1] === "(")) {
+					const [body, next] = readSubstitution(source, i);
+					addCommand(body);
+					i = next;
+					continue;
+				}
+				add(inner);
+				i += 1;
+			}
+			continue;
+		}
+		if (((char === "$" || char === "<" || char === ">") && source[i + 1] === "(") || char === "`") {
+			const [body, next] = readSubstitution(source, i);
+			addCommand(body);
+			i = next;
+			continue;
+		}
+		if (char === "\\") {
+			if (source[i + 1] === undefined) {
+				add("\\");
+				i += 1;
+			} else if (source[i + 1] === "\n") {
+				i += 2;
+			} else {
+				add(source[i + 1]);
+				i += 2;
+			}
+			continue;
+		}
+		if (";&|".includes(char) || ("(){}".includes(char) && !pending)) {
+			flush();
+			tokens.push(SEPARATOR);
+			i += 1;
+			continue;
+		}
+		add(char);
+		i += 1;
+	}
+	flush();
+	return tokens;
+}
+
+// Blank heredoc bodies so their text (often documentation about sudo) is not read as commands.
+// Quote-blind: a `<<` in a comment or quoted string misfires, which can only hide a later command.
+function blankHeredocs(source: string): string {
+	const lines = source.split("\n");
+	let pending: { word: string; tabs: boolean } | undefined;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i] as string;
+		if (pending !== undefined) {
+			const candidate = pending.tabs ? line.replace(/^\t+/, "") : line;
+			if (candidate === pending.word) {
+				pending = undefined;
+			} else {
+				lines[i] = "";
+			}
+			continue;
+		}
+		const pattern = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_]\w*)\2/g;
+		for (let match = pattern.exec(line); match !== null; match = pattern.exec(line)) {
+			pending = { word: match[3], tabs: match[1] === "-" };
+		}
 	}
 	return lines.join("\n");
 }
-// A redirection word's width: 2 when it swallows its target, 1 when the target is attached, else 0.
-function redirSkip(v: string): number {
-	const m = /^(?:[0-9]+)?(?:&>>|&>|>>|>\||<>|>&|<&|<<<|<<-|<<|<|>)(.*)$/.exec(v);
-	return m === null ? 0 : m[1] === "" ? 2 : 1;
-}
-// Index of the command a launcher runs, past its options (and a timeout duration).
-function skipWrapper(all: string[], i: number, base: string): number {
-	const opts = VALUES[base] ?? [];
-	let j = i + 1;
-	while (j < all.length) {
-		const v = all[j] as string;
-		if (v === "--") return j + 1;
-		if (!v.startsWith("-") || v === "-") break;
-		const o = opts.find((x) => v === x || v.startsWith(`${x}=`) || (x.length === 2 && v.length > 2 && v.startsWith(x)));
-		j += o !== undefined && v === o ? 2 : 1;
+
+// Skip a launcher's option words. valueFlags lists the short options that take a value, so the word
+// after one is skipped as well.
+function skipOptions(words: string[], start: number, valueFlags: string): number {
+	let j = start;
+	while (j < words.length) {
+		const word = words[j] as string;
+		if (word === "--") {
+			return j + 1;
+		}
+		if (!word.startsWith("-") || word === "-" || word.startsWith("--")) {
+			break;
+		}
+		const takesValue = valueFlags.includes(word.charAt(1));
+		j += takesValue && word.length === 2 ? 2 : 1;
 	}
-	if (base === "timeout" && /^[0-9]/.test(all[j] ?? "")) j++;
 	return j;
 }
-// `env -S 'cmd args'` splits a string into a command and its arguments.
-function inlineScript(all: string[], i: number, base: string): string | undefined {
-	if (base !== "env") return undefined;
-	for (let j = i + 1; j < all.length; j++) {
-		const v = all[j] as string;
-		if (v === "-S" || v === "--split-string") return all[j + 1];
-		if (v.startsWith("-S") && v.length > 2) return v.slice(2);
-		if (v.startsWith("--split-string=")) return v.slice(14);
+
+// The script a shell's -c option would run, or undefined when the call has no -c.
+function shellEscalation(words: string[], i: number): string | undefined {
+	for (let j = i + 1; j < words.length; j++) {
+		const word = words[j] as string;
+		if (word === "--") {
+			return undefined;
+		}
+		if (word.startsWith("--") || word === "-") {
+			continue;
+		}
+		if (!word.startsWith("-")) {
+			return undefined; // the first non-option word is a script file, not inline code
+		}
+		const flags = word.slice(1);
+		if (flags === "o" || flags === "O") {
+			j += 1; // the next word is the option's value
+			continue;
+		}
+		const c = flags.indexOf("c");
+		if (c < 0) {
+			continue;
+		}
+		const attached = flags.slice(c + 1);
+		const script = attached === "" ? words[j + 1] : attached;
+		if (script === undefined) {
+			return undefined;
+		}
+		return escalationInString(script);
 	}
 	return undefined;
 }
-// The script of a shell's -c option, or undefined when no -c is present.
-function shellScript(all: string[], i: number): string | undefined {
-	for (let j = i + 1; j < all.length; j++) {
-		const v = all[j] as string;
-		if (v === "--") return undefined;
-		if (v.startsWith("+") && v.length > 1) { if (v[1] === "o" || v[1] === "O") j++; continue; }
-		if (v.startsWith("--") || v === "-") continue;
-		if (!v.startsWith("-")) return undefined; // the first non-option word is a script file
-		const c = v.indexOf("c", 1);
-		if (c < 0) { if (v === "-o" || v === "-O") j++; continue; }
-		const script = v.slice(c + 1) || all[j + 1];
-		return script === undefined ? undefined : escalationInString(script);
+
+// The escalation a find command would run, if any of its -exec style actions has one.
+function findExecEscalation(words: string[], i: number): string | undefined {
+	for (let j = i + 1; j < words.length; j++) {
+		if (!["-exec", "-execdir", "-ok", "-okdir"].includes(words[j] as string)) {
+			continue;
+		}
+		const found = escalates(words.slice(j + 1));
+		if (found !== undefined) {
+			return found;
+		}
 	}
 	return undefined;
 }
-function escalates(all: string[]): string | undefined {
-	for (let i = 0; i < all.length; ) {
-		const v = all[i] as string;
-		const r = redirSkip(v);
-		if (r) { i += r; continue; }
-		if (/^[A-Za-z_]\w*=/.test(v)) { i++; continue; }
-		const base = v.split("/").pop() || v;
-		if (KEYWORDS.has(base)) { i++; continue; }
-		if (ESCALATION.has(base)) return base;
-		if (SHELLS.has(base)) return shellScript(all, i);
-		if (base === "eval") return escalationInString(all.slice(i + 1).join(" "));
-		if (base === "find") { for (let j = i + 1; j < all.length; j++) if (["-exec", "-execdir", "-ok", "-okdir"].includes(all[j] as string)) { const e = escalates(all.slice(j + 1)); if (e !== undefined) return e; } return undefined; }
-		if (base === "ssh") { const j = skipWrapper(all, i, base) + 1; return j < all.length ? escalationInString(all.slice(j).join(" ")) : undefined; }
-		if (WRAPPERS.has(base)) {
-			const next = all[i + 1] ?? "";
-			if (base === "command" && next.startsWith("-") && /[vV]/.test(next)) return undefined;
-			const inline = inlineScript(all, i, base);
-			if (inline !== undefined) return escalationInString(inline);
-			i = skipWrapper(all, i, base);
+
+// `ssh [options] host command...` runs the command on the remote host.
+function remoteEscalation(words: string[], i: number): string | undefined {
+	let j = skipOptions(words, i + 1, SSH_VALUE_OPTS);
+	if (j >= words.length) {
+		return undefined;
+	}
+	j += 1; // the host
+	if (j >= words.length) {
+		return undefined;
+	}
+	return escalationInString(words.slice(j).join(" "));
+}
+
+// The escalation command a single simple command would run, if any.
+function escalates(words: string[]): string | undefined {
+	for (let i = 0; i < words.length; ) {
+		const word = words[i] as string;
+		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+			i += 1;
+			continue;
+		}
+		const name = word.split("/").pop() || word;
+		if (ESCALATION.has(name)) {
+			return name;
+		}
+		if (SHELLS.has(name)) {
+			return shellEscalation(words, i);
+		}
+		if (name === "eval") {
+			return escalationInString(words.slice(i + 1).join(" "));
+		}
+		if (name === "find") {
+			return findExecEscalation(words, i);
+		}
+		if (name === "ssh") {
+			return remoteEscalation(words, i);
+		}
+		if (PREFIXES[name] !== undefined) {
+			let j = skipOptions(words, i + 1, PREFIXES[name]);
+			if (name === "timeout" && /^[0-9]/.test(words[j] ?? "")) {
+				j += 1; // the duration
+			}
+			i = j;
 			continue;
 		}
 		return undefined;
 	}
 	return undefined;
 }
-function escalationInString(src: string): string | undefined {
-	const toks = tokenize(blankHeredocs(src));
-	for (const t of toks) if (t[0] === SUB) { const e = escalationInString(t.slice(1)); if (e !== undefined) return e; }
+
+function escalationInString(source: string): string | undefined {
+	const tokens = tokenize(blankHeredocs(source));
 	let words: string[] = [];
-	for (const t of toks) {
-		if (t === SEP) { const e = words.length ? escalates(words) : undefined; if (e !== undefined) return e; words = []; }
-		else if (t[0] !== SUB) words.push(t);
+	for (const token of tokens) {
+		if (token !== SEPARATOR) {
+			words.push(token);
+			continue;
+		}
+		if (words.length > 0) {
+			const found = escalates(words);
+			if (found !== undefined) {
+				return found;
+			}
+		}
+		words = [];
 	}
-	return words.length ? escalates(words) : undefined;
+	if (words.length > 0) {
+		return escalates(words);
+	}
+	return undefined;
 }
 
 /** The escalation command a shell string would run, or undefined if it only mentions one. */
@@ -189,6 +369,7 @@ function blockReason(rawCommand: string): string {
 		"(their shell is fish; in bash the tee is `2>&1 | tee /tmp/pi/sudo-run.log`). Then read that file for the output.",
 	].join("\n");
 }
+
 export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event) => {
 		if (event.toolName !== "bash") return;
