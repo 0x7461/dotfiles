@@ -101,9 +101,10 @@ function recursiveCommand(command: string): boolean {
 	return RECURSIVE_VERB.test(command) || RECURSIVE_FLAG.test(command);
 }
 
-// Text outside single and double quotes, so a relative name in a commit message is not a path.
-function unquoted(command: string): string {
-	return command.replace(/"[^"]*"|'[^']*'/g, " ");
+// Keep the first word of each quoted string, so a relative name still counts when it starts the
+// quote ('finance/log.md') but not when it sits mid-sentence inside one ("fix mail/parser").
+function quotedHeads(command: string): string {
+	return command.replace(/"[^"]*"|'[^']*'/g, (q) => q[0] + q.slice(1, -1).split(/\s+/)[0] + q[0]);
 }
 
 function anyMatch(command: string, patterns: RegExp[]): boolean {
@@ -113,7 +114,7 @@ function anyMatch(command: string, patterns: RegExp[]): boolean {
 // A directory above a root, spelled relative to a working directory that contains it. Like the
 // relative root form, it needs a "/" after it or a "./" before it, so a bare word does not match.
 function relativeAncestor(command: string, cwd: string, root: string): boolean {
-	const bare = unquoted(command);
+	const bare = quotedHeads(command);
 	const parts = relative(HOME, root).split(sep).slice(0, -1);
 	return parts.some((_, i) => {
 		const dir = join(HOME, ...parts.slice(0, i + 1));
@@ -124,10 +125,11 @@ function relativeAncestor(command: string, cwd: string, root: string): boolean {
 }
 
 // A root as a shell command could spell it, or, for a recursive command, a directory above one.
-// The relative forms are matched outside quotes, so a bare name in a message does not match.
+// The relative forms keep only the first word of a quoted string, so a bare name in a message
+// does not match.
 function rootInCommand(command: string, cwd: string): string | undefined {
 	const normalized = command.replace(/\/\.\//g, "/").replace(/\/{2,}/g, "/");
-	const bare = unquoted(normalized);
+	const bare = quotedHeads(normalized);
 	const recursive = recursiveCommand(normalized);
 	return ROOT_PATTERNS.find(({ root, own, above }) => {
 		if (anyMatch(normalized, own)) return true;
