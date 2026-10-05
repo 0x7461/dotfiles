@@ -2,7 +2,7 @@
   "lastChangelogVersion": "1.0.2",
   "theme": "dark",
   "defaultProvider": "deepseek",
-  "defaultModel": "deepseek-v4-flash",
+  "defaultModel": "deepseek-flash",
   "defaultThinkingLevel": "medium",
   "packages": []
 }
