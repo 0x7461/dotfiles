@@ -455,8 +455,9 @@ export default function (pi: ExtensionAPI) {
 					block: true,
 					reason:
 						`private-guard: \`chezmoi ${sub}\` prints secrets from chezmoi.toml [data] to stdout, ` +
-						"and a secret never enters a model's context, local models included. " +
-						"Use `chezmoi-diff-redacted` instead, or ask the user to run it themselves.",
+						"and a secret never enters a model's context, local models included. Get its effect " +
+						"from an extension or script that reads it itself, like `chezmoi-diff-redacted`, or " +
+						"from the user running the command.",
 				};
 			}
 		}
@@ -468,7 +469,8 @@ export default function (pi: ExtensionAPI) {
 				block: true,
 				reason:
 					`private-guard: ${shown} is a secret, and a secret never enters any model's context, ` +
-					"local models included. Reference it by path, or ask the user to run it themselves.",
+					"local models included. Get its effect from an extension or script that reads it " +
+					"itself, as status.ts does, or from the user running the command.",
 			};
 		}
 		if (provider !== undefined && PRIVATE_PROVIDERS.has(provider)) return;
