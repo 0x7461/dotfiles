@@ -1,3 +1,5 @@
 .config/fcitx5/conf/cached_layouts
 .pi/agent/auth.json
 .pi/agent/models-store.json
+README.md
+LICENSE
