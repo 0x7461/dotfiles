@@ -79,8 +79,9 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   `~/.pi/agent/extensions/` (`audit-commands.ts`, `notify.ts`, `status.ts`; chezmoi-tracked). Change
   both sides or they drift. Where they live and how each was verified: `~/projects/ithaca/agent_docs/pi-setup.md`.
 
-- [ ] **A file with two owners?** `~/.claude/statusline.sh` is in chezmoi *and* in the gist since
-  2026-09-18. Whichever you edited, update the other, or the next `chezmoi apply` reverts a gist pull.
+- [ ] **A file with two owners?** `~/.claude/statusline.sh` and `statusline.py` are in chezmoi *and*
+  in the gist (since 2026-09-18). Whichever you edited, update the other, or the next `chezmoi apply`
+  reverts a gist pull. Missed once: the 2026-10-06 ctx change reached the gist only on a later check.
   Prefer collapsing to one owner when the sync settles.
 
 ## After service changes (runit)
