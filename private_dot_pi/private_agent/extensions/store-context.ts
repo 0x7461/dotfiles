@@ -19,7 +19,7 @@ function withoutFrontmatter(text: string): string {
 	return text.replace(/^---\n[\s\S]*?\n---\n/, "");
 }
 
-function storeContext(): string {
+function storeContext(sessionId: string): string {
 	const rules = readdirSync(RULES_DIR)
 		.filter((name) => name.endsWith(".md"))
 		.sort()
@@ -29,17 +29,18 @@ function storeContext(): string {
 	);
 	const index = join(MEMORY_DIR, "MEMORY.md");
 	const memory = `<!-- ${index} -->\nMemory folder: ${MEMORY_DIR}/ — read a file there when its index line looks relevant.\n\n${readFileSync(index, "utf8")}`;
-	return [...files, memory].join("\n\n");
+	const session = `pi session id: ${sessionId} — use it as the session-id in a memory's metadata.evidence line.`;
+	return [...files, memory, session].join("\n\n");
 }
 
 let snapshot: string | undefined;
 
 export default function (pi: ExtensionAPI) {
-	pi.on("session_start", async () => {
-		snapshot = storeContext();
+	pi.on("session_start", async (_event, ctx) => {
+		snapshot = storeContext(ctx.sessionManager.getSessionId());
 	});
-	pi.on("before_agent_start", async (event) => {
-		snapshot ??= storeContext();
+	pi.on("before_agent_start", async (event, ctx) => {
+		snapshot ??= storeContext(ctx.sessionManager.getSessionId());
 		return { systemPrompt: `${event.systemPrompt}\n\n${snapshot}` };
 	});
 }
