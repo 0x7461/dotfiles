@@ -266,9 +266,11 @@ function secretRendering(command: string): string | undefined {
 	return undefined;
 }
 
-// A file whose name itself marks it secret: a dotenv file (bar the example) or a saved session.
+// A file whose name itself marks it secret: a dotenv file (bar the example), a glob that can
+// expand to one (".env*"), or a saved session.
 function secretFileName(name: string): boolean {
 	if (name === ".env" || (name.startsWith(".env.") && name !== ".env.example")) return true;
+	if (/^\.env[*?\[]/.test(name)) return true;
 	return name.endsWith(".session");
 }
 
@@ -309,6 +311,30 @@ function secretNameCall(toolName: string, input: Record<string, unknown>, cwd: s
 		return typeof input.path === "string" ? secretNameInPath(input.path, cwd) : undefined;
 	}
 	return undefined;
+}
+
+// A recursive `grep` reads .env and *.session files in a tree, so it is blocked unless the command
+// excludes both. ripgrep skips hidden and gitignored files by default, so it is not covered.
+const GREP_RECURSIVE = /^-[a-zA-Z]*[rR][a-zA-Z]*$/;
+
+function grepUnfiltered(command: string): boolean {
+	for (const segment of segments(command)) {
+		const toks = tokens(segment);
+		const i = commandStart(toks, 0);
+		if (i >= toks.length) continue;
+		const head = base(toks[i]);
+		const recursive = toks.slice(i + 1).some((t) => t === "--recursive" || GREP_RECURSIVE.test(t));
+		if (head === "grep" && recursive && !(segment.includes(".env*") && segment.includes("*.session"))) {
+			return true;
+		}
+		const inner =
+			SHELLS.has(head) ? shellCommandString(toks, i) : head === "eval" ? toks.slice(i + 1).join(" ") : undefined;
+		if (inner !== undefined && grepUnfiltered(inner)) return true;
+	}
+	for (const sub of substitutions(command)) {
+		if (grepUnfiltered(sub)) return true;
+	}
+	return false;
 }
 
 // Secret roots: blocked on every model, ollama included, because a secret never enters any model's
@@ -526,6 +552,16 @@ export default function (pi: ExtensionAPI) {
 					`private-guard: ${name} is a secret file, and a secret never enters any model's context, ` +
 					"local models included. Get its effect from an extension or script that reads it itself, " +
 					"as status.ts does, or from the user running the command.",
+			};
+		}
+		// A recursive grep reads secret files unless it excludes them, on every model.
+		if (event.toolName === "bash" && typeof input.command === "string" && grepUnfiltered(input.command)) {
+			return {
+				block: true,
+				reason:
+					"private-guard: a recursive grep without the excludes prints .env and *.session contents, " +
+					"and a secret never enters any model's context, local models included. Add " +
+					"`--exclude='.env*' --exclude='*.session'`, or ask the user to run the command.",
 			};
 		}
 		// Secret roots are blocked on every model too: a secret never enters any model's context.
