@@ -39,7 +39,7 @@ const CHEZMOI_SUBCOMMANDS = new Set([
 	"verify",
 ]);
 const WRAPPERS = new Set([
-	"command", "doas", "env", "exec", "ionice", "nice", "nohup", "stdbuf", "sudo", "time", "timeout", "xargs",
+	"command", "doas", "env", "exec", "ionice", "nice", "nohup", "stdbuf", "sudo", "time", "timeout", "watch", "xargs",
 ]);
 // Flags that take the following token as a value, so a wrapper's own arguments are not taken for
 // its command ("env -u VAR chezmoi", "nice -n 5 chezmoi").
@@ -53,6 +53,7 @@ const WRAPPER_VALUE_FLAGS: Record<string, string[]> = {
 	sudo: ["-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-C", "--close-from", "-r", "--role", "-t", "--type", "-D", "--chdir"],
 	time: ["-o", "--output", "-f", "--format"],
 	timeout: ["-s", "--signal", "-k", "--kill-after"],
+	watch: ["-n", "--interval"],
 	xargs: ["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars", "-L", "--max-lines", "--process-slot-var"],
 };
 const SHELLS = new Set(["ash", "bash", "dash", "fish", "ksh", "sh", "zsh"]);
@@ -152,6 +153,84 @@ function segments(command: string): string[] {
 	return out;
 }
 
+// The text between a `(` and its matching `)`, honouring nesting, quotes and escapes. `start` is
+// the index just after the opening paren.
+function balanced(text: string, start: number): { text: string; end: number } | undefined {
+	let depth = 1;
+	let i = start;
+	while (i < text.length) {
+		const ch = text[i];
+		if (ch === "\\") {
+			i += 2;
+			continue;
+		}
+		if (ch === "'") {
+			i++;
+			while (i < text.length && text[i] !== "'") i++;
+			i++;
+			continue;
+		}
+		if (ch === '"') {
+			i++;
+			while (i < text.length && text[i] !== '"') {
+				if (text[i] === "\\") i++;
+				i++;
+			}
+			i++;
+			continue;
+		}
+		if (ch === "`") {
+			const end = text.indexOf("`", i + 1);
+			if (end === -1) return undefined;
+			i = end + 1;
+			continue;
+		}
+		if (ch === "(") depth++;
+		else if (ch === ")") {
+			depth--;
+			if (depth === 0) return { text: text.slice(start, i), end: i + 1 };
+		}
+		i++;
+	}
+	return undefined;
+}
+
+// The inner text of each command substitution (`$(...)` or backtick). A double-quoted substitution
+// still runs a command, so it is scanned; single-quoted text is literal.
+function substitutions(command: string): string[] {
+	const out: string[] = [];
+	let i = 0;
+	while (i < command.length) {
+		const ch = command[i];
+		if (ch === "\\") {
+			i += 2;
+			continue;
+		}
+		if (ch === "'") {
+			i++;
+			while (i < command.length && command[i] !== "'") i++;
+			i++;
+			continue;
+		}
+		if (ch === "$" && command[i + 1] === "(") {
+			const inner = balanced(command, i + 2);
+			if (inner === undefined) break;
+			out.push(inner.text);
+			i = inner.end;
+			continue;
+		}
+		if (ch === "`") {
+			const end = command.indexOf("`", i + 1);
+			if (end === -1) break;
+			out.push(command.slice(i + 1, end));
+			i = end + 1;
+			continue;
+		}
+		i++;
+	}
+	return out;
+}
+
 // The subcommand to name in a block, or undefined when no secret-rendering call is present.
 function secretRendering(command: string): string | undefined {
 	for (const segment of segments(command)) {
@@ -167,11 +246,20 @@ function secretRendering(command: string): string | undefined {
 			}
 			continue;
 		}
+		if (head === "eval") {
+			const nested = secretRendering(toks.slice(i + 1).join(" "));
+			if (nested !== undefined) return nested;
+			continue;
+		}
 		if (head !== "chezmoi") continue;
 		const { subcommand, verbose } = chezmoiArgs(toks, i);
 		if (subcommand === undefined) continue;
 		if (SECRET_SUBCOMMANDS.has(subcommand)) return subcommand;
 		if (verbose && VERBOSE_SECRET_SUBCOMMANDS.has(subcommand)) return `${subcommand} --verbose`;
+	}
+	for (const sub of substitutions(command)) {
+		const nested = secretRendering(sub);
+		if (nested !== undefined) return nested;
 	}
 	return undefined;
 }
