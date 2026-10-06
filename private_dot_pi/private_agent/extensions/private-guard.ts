@@ -266,11 +266,67 @@ function secretRendering(command: string): string | undefined {
 	return undefined;
 }
 
+// A file whose name itself marks it secret: a dotenv file (bar the example) or a saved session.
+function secretFileName(name: string): boolean {
+	if (name === ".env" || (name.startsWith(".env.") && name !== ".env.example")) return true;
+	return name.endsWith(".session");
+}
+
+// The offending file name in a read/write/edit path, or undefined.
+function secretNameInPath(path: string, cwd: string): string | undefined {
+	const raw = path === "~" ? HOME : path.startsWith("~/") ? join(HOME, path.slice(2)) : path;
+	return [basename(raw), basename(absolute(path, cwd))].find(secretFileName);
+}
+
+// The offending file name in a bash command, or undefined. A shell -c string, eval and command
+// substitutions are searched too, so a name behind one still counts.
+function secretNameInCommand(command: string): string | undefined {
+	for (const segment of segments(command)) {
+		const toks = tokens(segment);
+		const hit = toks.map(base).find(secretFileName);
+		if (hit !== undefined) return hit;
+		const i = commandStart(toks, 0);
+		if (i >= toks.length) continue;
+		const head = base(toks[i]);
+		const inner =
+			SHELLS.has(head) ? shellCommandString(toks, i) : head === "eval" ? toks.slice(i + 1).join(" ") : undefined;
+		const nested = inner === undefined ? undefined : secretNameInCommand(inner);
+		if (nested !== undefined) return nested;
+	}
+	for (const sub of substitutions(command)) {
+		const nested = secretNameInCommand(sub);
+		if (nested !== undefined) return nested;
+	}
+	return undefined;
+}
+
+// The file name that makes a tool call secret, or undefined.
+function secretNameCall(toolName: string, input: Record<string, unknown>, cwd: string): string | undefined {
+	if (toolName === "bash") {
+		return typeof input.command === "string" ? secretNameInCommand(input.command) : undefined;
+	}
+	if (toolName === "read" || toolName === "write" || toolName === "edit") {
+		return typeof input.path === "string" ? secretNameInPath(input.path, cwd) : undefined;
+	}
+	return undefined;
+}
+
 // Secret roots: blocked on every model, ollama included, because a secret never enters any model's
 // context. The other private roots are personal data, which a local model may see.
 const SECRET_ROOTS = [
+	".claude/.credentials.json",
+	".config/aria2/aria2.conf",
 	".config/chezmoi/chezmoi.toml",
 	".config/deepseek",
+	".config/gallery-dl/config.json",
+	".config/google-chrome",
+	".gemini/antigravity-cli/antigravity-oauth-token",
+	".gnupg",
+	".local/share/TelegramDesktop",
+	".local/share/qutebrowser",
+	".local/share/smuggler/sessions",
+	".mozilla",
+	".pi/agent/auth.json",
 	".ssh",
 ].map((p) => join(HOME, p));
 
@@ -460,6 +516,17 @@ export default function (pi: ExtensionAPI) {
 						"from the user running the command.",
 				};
 			}
+		}
+		// A file whose name marks it secret is blocked on every model too.
+		const name = secretNameCall(event.toolName, input, ctx.cwd);
+		if (name !== undefined) {
+			return {
+				block: true,
+				reason:
+					`private-guard: ${name} is a secret file, and a secret never enters any model's context, ` +
+					"local models included. Get its effect from an extension or script that reads it itself, " +
+					"as status.ts does, or from the user running the command.",
+			};
 		}
 		// Secret roots are blocked on every model too: a secret never enters any model's context.
 		const secret = rootForCall(event.toolName, input, ctx.cwd, SECRET_LEAVES, SECRET_PATTERNS);
