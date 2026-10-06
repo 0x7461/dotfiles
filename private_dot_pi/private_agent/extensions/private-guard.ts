@@ -39,8 +39,23 @@ const CHEZMOI_SUBCOMMANDS = new Set([
 	"verify",
 ]);
 const WRAPPERS = new Set([
-	"command", "doas", "env", "exec", "ionice", "nice", "nohup", "stdbuf", "sudo", "time", "xargs",
+	"command", "doas", "env", "exec", "ionice", "nice", "nohup", "stdbuf", "sudo", "time", "timeout", "xargs",
 ]);
+// Flags that take the following token as a value, so a wrapper's own arguments are not taken for
+// its command ("env -u VAR chezmoi", "nice -n 5 chezmoi").
+const WRAPPER_VALUE_FLAGS: Record<string, string[]> = {
+	doas: ["-u", "-C"],
+	env: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"],
+	exec: ["-a"],
+	ionice: ["-c", "-n", "-p", "-P", "-u"],
+	nice: ["-n", "--adjustment"],
+	stdbuf: ["-i", "-o", "-e", "--input", "--output", "--error"],
+	sudo: ["-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-C", "--close-from", "-r", "--role", "-t", "--type", "-D", "--chdir"],
+	time: ["-o", "--output", "-f", "--format"],
+	timeout: ["-s", "--signal", "-k", "--kill-after"],
+	xargs: ["-a", "--arg-file", "-d", "--delimiter", "-E", "--eof", "-I", "--replace", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars", "-L", "--max-lines", "--process-slot-var"],
+};
+const SHELLS = new Set(["ash", "bash", "dash", "fish", "ksh", "sh", "zsh"]);
 
 function tokens(segment: string): string[] {
 	return (segment.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((t) =>
@@ -52,38 +67,111 @@ function base(token: string): string {
 	return token.slice(token.lastIndexOf("/") + 1);
 }
 
-// The chezmoi call in one simple command: its subcommand, and whether a verbose flag follows.
-function chezmoiCall(segment: string): { subcommand?: string; verbose: boolean } | undefined {
-	const toks = tokens(segment);
-	let i = 0;
+// The index of the command word, stepping over a wrapper chain and the wrapper's own arguments.
+// Only a token in command position counts, so "git -C ~/.local/share/chezmoi diff" is left alone
+// even though an argument holds chezmoi's name.
+function commandStart(toks: string[], i: number): number {
 	while (i < toks.length) {
 		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) {
 			i++;
-		} else if (WRAPPERS.has(base(toks[i]))) {
-			i++;
-			while (i < toks.length && toks[i].startsWith("-")) i++;
-		} else {
+			continue;
+		}
+		const name = base(toks[i]);
+		if (!WRAPPERS.has(name)) return i;
+		i++;
+		const values = WRAPPER_VALUE_FLAGS[name] ?? [];
+		let positional = name === "timeout" || name === "nice" ? 1 : 0;
+		while (i < toks.length) {
+			const t = toks[i];
+			if (t === "--") {
+				i++;
+				break;
+			}
+			if (t.startsWith("-")) {
+				i += values.includes(t) ? 2 : 1;
+				continue;
+			}
+			if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
+				i++;
+				continue;
+			}
+			if (positional > 0 && (name !== "nice" || /^-?[0-9]+$/.test(t))) {
+				positional--;
+				i++;
+				continue;
+			}
 			break;
 		}
 	}
-	if (i >= toks.length || base(toks[i]) !== "chezmoi") return undefined;
+	return i;
+}
+
+// The command string after a shell's -c, when the command word is a shell.
+function shellCommandString(toks: string[], i: number): string | undefined {
+	for (let j = i + 1; j < toks.length; j++) {
+		const t = toks[j];
+		if (t === "--" || !t.startsWith("-")) break;
+		if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(t)) return toks[j + 1];
+	}
+	return undefined;
+}
+
+// The subcommand and verbose flag among a chezmoi call's arguments.
+function chezmoiArgs(toks: string[], i: number): { subcommand?: string; verbose: boolean } {
 	let subcommand: string | undefined;
 	let verbose = false;
-	for (i++; i < toks.length; i++) {
-		const t = toks[i];
+	for (let j = i + 1; j < toks.length; j++) {
+		const t = toks[j];
 		if (t === "--verbose" || t === "--verbose=true" || /^-[a-zA-Z]*v[a-zA-Z]*$/.test(t)) verbose = true;
 		if (subcommand === undefined && CHEZMOI_SUBCOMMANDS.has(t)) subcommand = t;
 	}
 	return { subcommand, verbose };
 }
 
+// Split on shell separators that are not inside a quote, so a separator in a shell -c string stays
+// with its command.
+function segments(command: string): string[] {
+	const out: string[] = [];
+	let buf = "";
+	let quote: string | undefined;
+	for (const ch of command) {
+		if (quote !== undefined) {
+			buf += ch;
+			if (ch === quote) quote = undefined;
+		} else if (ch === '"' || ch === "'") {
+			quote = ch;
+			buf += ch;
+		} else if (";|&\n()".includes(ch)) {
+			out.push(buf);
+			buf = "";
+		} else {
+			buf += ch;
+		}
+	}
+	out.push(buf);
+	return out;
+}
+
 // The subcommand to name in a block, or undefined when no secret-rendering call is present.
 function secretRendering(command: string): string | undefined {
-	for (const segment of command.split(/[;|&\n()]/)) {
-		const call = chezmoiCall(segment);
-		if (call?.subcommand === undefined) continue;
-		if (SECRET_SUBCOMMANDS.has(call.subcommand)) return call.subcommand;
-		if (call.verbose && VERBOSE_SECRET_SUBCOMMANDS.has(call.subcommand)) return `${call.subcommand} --verbose`;
+	for (const segment of segments(command)) {
+		const toks = tokens(segment);
+		const i = commandStart(toks, 0);
+		if (i >= toks.length) continue;
+		const head = base(toks[i]);
+		if (SHELLS.has(head)) {
+			const inner = shellCommandString(toks, i);
+			if (inner !== undefined) {
+				const nested = secretRendering(inner);
+				if (nested !== undefined) return nested;
+			}
+			continue;
+		}
+		if (head !== "chezmoi") continue;
+		const { subcommand, verbose } = chezmoiArgs(toks, i);
+		if (subcommand === undefined) continue;
+		if (SECRET_SUBCOMMANDS.has(subcommand)) return subcommand;
+		if (verbose && VERBOSE_SECRET_SUBCOMMANDS.has(subcommand)) return `${subcommand} --verbose`;
 	}
 	return undefined;
 }
