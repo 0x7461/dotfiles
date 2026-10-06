@@ -213,14 +213,19 @@ def build(d):
     if vim:
         add("vim", paint("34", vim))
 
-    # Context. The 2x marker means the session exceeds the 200k tier.
+    # Context. The token count is the signal, not the percentage. Two tiers colour
+    # it: 100k warns and 200k errors and adds "heavy". The label carries the tier,
+    # so the row still reads without colour.
     ctx = d.get("context_window") or {}
-    pct = pct_int(ctx.get("used_percentage"))
-    if pct is not None:
-        text = "ctx %d%%" % pct
-        if d.get("exceeds_200k_tokens"):
-            text += " 2x"
-        add("ctx", paint(heat(pct), text))
+    tokens = ctx.get("total_input_tokens")
+    if isinstance(tokens, (int, float)) and tokens >= 0:
+        text = "ctx %dK" % (int(tokens) // 1000)
+        if tokens >= 200000:
+            add("ctx", paint("31", text + " heavy"))
+        elif tokens >= 100000:
+            add("ctx", paint("33", text))
+        else:
+            add("ctx", text)
 
     # Limits and cost
     rl = d.get("rate_limits") or {}

@@ -7,6 +7,7 @@ import { join } from "node:path";
 // Fills the gaps between pi's built-in footer and CC's status line (pi's footer already
 // shows dir, branch, model, thinking level, context % and session cost):
 //   - uncommitted file count in the session cwd
+//   - the context token count from 100K up, since the footer shows only the percentage
 //   - what the active paid provider has left, which CC showed as its 5h/7d limit meters.
 //     Two hosts are in play (ithaca PLAN, Decisions):
 //     * opencode-go — flat subscription with capped allowances. Go prices usage at the same
@@ -84,6 +85,16 @@ function heat(ctx: ExtensionContext, pct: number, text: string): string {
 	if (pct >= 90) return ctx.ui.theme.fg("error", text);
 	if (pct >= 70) return ctx.ui.theme.fg("warning", text);
 	return text;
+}
+
+// Context token count, same 100K / 200K tiers as CC's status line. Only shown from
+// 100K up; the footer's percentage is enough below that. "heavy" is the label that
+// carries the tier, so the colour is never the only signal.
+function contextStatus(ctx: ExtensionContext): string | undefined {
+	const tokens = ctx.getContextUsage()?.tokens;
+	if (tokens == null || tokens < 100_000) return undefined;
+	const text = `ctx ${Math.floor(tokens / 1000)}K${tokens >= 200_000 ? " heavy" : ""}`;
+	return ctx.ui.theme.fg(tokens >= 200_000 ? "error" : "warning", text);
 }
 
 function goStatus(ctx: ExtensionContext): string {
@@ -170,6 +181,7 @@ function refreshGit(ctx: ExtensionContext) {
 
 async function refresh(ctx: ExtensionContext) {
 	if (!ctx.hasUI) return;
+	ctx.ui.setStatus("ctx", contextStatus(ctx));
 	refreshGit(ctx);
 	await refreshSpend(ctx);
 }
