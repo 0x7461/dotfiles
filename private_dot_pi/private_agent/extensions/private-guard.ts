@@ -13,6 +13,81 @@ const HOME = homedir();
 // Providers whose requests stay on this machine.
 const PRIVATE_PROVIDERS = new Set(["ollama"]);
 
+// chezmoi.toml's [data] holds secrets, and these subcommands render them — or the target state that
+// embeds them — to stdout. They are blocked on every model, ollama included: a secret never enters
+// any model's context, so the private-provider exemption below does not reach them. `apply` and
+// `update` render nothing by default; only their verbose form prints the changed file contents.
+const SECRET_SUBCOMMANDS = new Set([
+	"archive",
+	"cat",
+	"cat-config",
+	"data",
+	"diff",
+	"dump",
+	"dump-config",
+	"execute-template",
+]);
+const VERBOSE_SECRET_SUBCOMMANDS = new Set(["apply", "update"]);
+// Every chezmoi subcommand, so a global flag's value ("--config data") is not taken for one.
+const CHEZMOI_SUBCOMMANDS = new Set([
+	"add", "age", "age-keygen", "apply", "archive", "cat", "cat-config", "cd", "chattr",
+	"completion", "data", "decrypt", "destroy", "diff", "docker", "doctor", "dump",
+	"dump-config", "edit", "edit-config", "edit-config-template", "edit-encrypted", "encrypt",
+	"execute-template", "forget", "generate", "git", "help", "ignored", "import", "init",
+	"license", "manage", "managed", "merge", "merge-all", "purge", "re-add", "secret",
+	"source-path", "ssh", "state", "status", "target-path", "unmanage", "unmanaged", "update",
+	"verify",
+]);
+const WRAPPERS = new Set([
+	"command", "doas", "env", "exec", "ionice", "nice", "nohup", "stdbuf", "sudo", "time", "xargs",
+]);
+
+function tokens(segment: string): string[] {
+	return (segment.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map((t) =>
+		t.length >= 2 && (t[0] === '"' || t[0] === "'") && t.at(-1) === t[0] ? t.slice(1, -1) : t,
+	);
+}
+
+function base(token: string): string {
+	return token.slice(token.lastIndexOf("/") + 1);
+}
+
+// The chezmoi call in one simple command: its subcommand, and whether a verbose flag follows.
+function chezmoiCall(segment: string): { subcommand?: string; verbose: boolean } | undefined {
+	const toks = tokens(segment);
+	let i = 0;
+	while (i < toks.length) {
+		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) {
+			i++;
+		} else if (WRAPPERS.has(base(toks[i]))) {
+			i++;
+			while (i < toks.length && toks[i].startsWith("-")) i++;
+		} else {
+			break;
+		}
+	}
+	if (i >= toks.length || base(toks[i]) !== "chezmoi") return undefined;
+	let subcommand: string | undefined;
+	let verbose = false;
+	for (i++; i < toks.length; i++) {
+		const t = toks[i];
+		if (t === "--verbose" || t === "--verbose=true" || /^-[a-zA-Z]*v[a-zA-Z]*$/.test(t)) verbose = true;
+		if (subcommand === undefined && CHEZMOI_SUBCOMMANDS.has(t)) subcommand = t;
+	}
+	return { subcommand, verbose };
+}
+
+// The subcommand to name in a block, or undefined when no secret-rendering call is present.
+function secretRendering(command: string): string | undefined {
+	for (const segment of command.split(/[;|&\n()]/)) {
+		const call = chezmoiCall(segment);
+		if (call?.subcommand === undefined) continue;
+		if (SECRET_SUBCOMMANDS.has(call.subcommand)) return call.subcommand;
+		if (call.verbose && VERBOSE_SECRET_SUBCOMMANDS.has(call.subcommand)) return `${call.subcommand} --verbose`;
+	}
+	return undefined;
+}
+
 const PRIVATE_ROOTS = [
 	".claude/pii-aliases.local.md",
 	"archive",
@@ -165,8 +240,22 @@ export function blockedRoot(toolName: string, input: Record<string, unknown>, cw
 export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => {
 		const provider = ctx.model?.provider;
+		const input = event.input as Record<string, unknown>;
+		// chezmoi secrets are blocked before the private-provider exemption, on every model.
+		if (event.toolName === "bash" && typeof input.command === "string") {
+			const sub = secretRendering(input.command);
+			if (sub !== undefined) {
+				return {
+					block: true,
+					reason:
+						`private-guard: \`chezmoi ${sub}\` prints secrets from chezmoi.toml [data] to stdout, ` +
+						"and a secret never enters a model's context, local models included. " +
+						"Use `chezmoi-diff-redacted` instead, or ask the user to run it themselves.",
+				};
+			}
+		}
 		if (provider !== undefined && PRIVATE_PROVIDERS.has(provider)) return;
-		const root = blockedRoot(event.toolName, event.input as Record<string, unknown>, ctx.cwd);
+		const root = blockedRoot(event.toolName, input, ctx.cwd);
 		if (root === undefined) return;
 		const shown = within(root, HOME) ? `~/${relative(HOME, root)}` : root;
 		return {
