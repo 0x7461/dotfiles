@@ -3,11 +3,13 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
-// Blocks the agent's tool calls that would read private files while the session's model is not
-// private. A blocked read never reaches the provider, so PII and secrets stay off DeepSeek, Go and
-// any other provider that trains on or retains inputs. Fails closed: an unknown provider, or no
-// model at all, counts as not private. A guardrail against accidents, not a wall: a glob, a path
-// built in a shell variable, or a script can still reach a private file indirectly.
+// Blocks the agent's tool calls that would read private files. Secret roots and chezmoi's rendered
+// [data] are blocked on every model, a local one included: a secret never enters any model's
+// context. The remaining private roots (PII) are blocked only while the session's model is not
+// private, so PII stays off DeepSeek, Go and any other provider that trains on or retains inputs.
+// Fails closed: an unknown provider, or no model at all, counts as not private. A guardrail
+// against accidents, not a wall: a glob, a path built in a shell variable, or a script can still
+// reach a private file indirectly.
 const HOME = homedir();
 
 // Providers whose requests stay on this machine.
@@ -264,6 +266,14 @@ function secretRendering(command: string): string | undefined {
 	return undefined;
 }
 
+// Secret roots: blocked on every model, ollama included, because a secret never enters any model's
+// context. The other private roots are personal data, which a local model may see.
+const SECRET_ROOTS = [
+	".config/chezmoi/chezmoi.toml",
+	".config/deepseek",
+	".ssh",
+].map((p) => join(HOME, p));
+
 const PRIVATE_ROOTS = [
 	".claude/pii-aliases.local.md",
 	"archive",
@@ -273,9 +283,6 @@ const PRIVATE_ROOTS = [
 	"obsidian-vault/personal",
 	".config/archivist",
 	".local/share/archivist",
-	".ssh",
-	".config/deepseek",
-	".config/chezmoi/chezmoi.toml",
 ].map((p) => join(HOME, p));
 
 // Resolve the deepest existing ancestor when the leaf is absent, which is normal for write, so a
@@ -288,9 +295,6 @@ function real(path: string): string {
 	}
 }
 
-// Each root under its literal path and its resolved one, so a symlink in either direction counts.
-const ROOTS = [...new Set(PRIVATE_ROOTS.flatMap((p) => [p, real(p)]))];
-
 function within(path: string, root: string): boolean {
 	return path === root || path.startsWith(root + sep);
 }
@@ -301,8 +305,8 @@ function absolute(path: string, cwd: string): string {
 }
 
 // The root a path falls inside, or, for a recursive search, the root it would descend into.
-function privateRootFor(path: string, recursive: boolean): string | undefined {
-	return ROOTS.find((root) => within(path, root) || (recursive && within(root, path)));
+function rootFor(path: string, recursive: boolean, roots: string[]): string | undefined {
+	return roots.find((root) => within(path, root) || (recursive && within(root, path)));
 }
 
 function escape(s: string): string {
@@ -339,11 +343,25 @@ function ancestorsOf(root: string): string[] {
 	return dirs.flatMap(spellings).concat(spellings(HOME));
 }
 
-const ROOT_PATTERNS = ROOTS.map((root) => ({
-	root,
-	own: spellings(root).map((s) => new RegExp(`${BEFORE}${escape(s)}${ROOT_AHEAD}`)),
-	above: ancestorsOf(root).map((s) => new RegExp(`${BEFORE}${escape(s)}${ANCESTOR_AHEAD}`)),
-}));
+interface RootPattern {
+	root: string;
+	own: RegExp[];
+	above: RegExp[];
+}
+
+// Each root under its literal path and its resolved one, so a symlink in either direction counts.
+function rootPatterns(roots: string[]): RootPattern[] {
+	return [...new Set(roots.flatMap((p) => [p, real(p)]))].map((root) => ({
+		root,
+		own: spellings(root).map((s) => new RegExp(`${BEFORE}${escape(s)}${ROOT_AHEAD}`)),
+		above: ancestorsOf(root).map((s) => new RegExp(`${BEFORE}${escape(s)}${ANCESTOR_AHEAD}`)),
+	}));
+}
+
+const SECRET_PATTERNS = rootPatterns(SECRET_ROOTS);
+const PRIVATE_PATTERNS = rootPatterns(PRIVATE_ROOTS);
+const SECRET_LEAVES = SECRET_PATTERNS.map((p) => p.root);
+const PRIVATE_LEAVES = PRIVATE_PATTERNS.map((p) => p.root);
 
 const RECURSIVE_VERB = /(^|[\s|;&(])(rg|find|tar|rsync|du|tree)(\s|$)/;
 const RECURSIVE_FLAG = /(^|[\s|;&(])(grep|cp|mv)\s+[^|;&]*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$)/;
@@ -378,11 +396,11 @@ function relativeAncestor(command: string, cwd: string, root: string): boolean {
 // A root as a shell command could spell it, or, for a recursive command, a directory above one.
 // The relative forms keep only the first word of a quoted string, so a bare name in a message
 // does not match.
-function rootInCommand(command: string, cwd: string): string | undefined {
+function rootInCommand(command: string, cwd: string, patterns: RootPattern[]): string | undefined {
 	const normalized = command.replace(/\/\.\//g, "/").replace(/\/{2,}/g, "/");
 	const bare = quotedHeads(normalized);
 	const recursive = recursiveCommand(normalized);
-	return ROOT_PATTERNS.find(({ root, own, above }) => {
+	return patterns.find(({ root, own, above }) => {
 		if (anyMatch(normalized, own)) return true;
 		if (recursive && anyMatch(normalized, above)) return true;
 		if (recursive && relativeAncestor(normalized, cwd, root)) return true;
@@ -392,25 +410,37 @@ function rootInCommand(command: string, cwd: string): string | undefined {
 	})?.root;
 }
 
-export function blockedRoot(toolName: string, input: Record<string, unknown>, cwd: string): string | undefined {
-	const inside = privateRootFor(real(cwd), false);
+// The root a tool call reaches, or undefined. `leaves` answers path containment, `patterns` the
+// command-line spellings.
+function rootForCall(
+	toolName: string,
+	input: Record<string, unknown>,
+	cwd: string,
+	leaves: string[],
+	patterns: RootPattern[],
+): string | undefined {
+	const inside = rootFor(real(cwd), false, leaves);
 	if (inside) return inside;
 	const path = typeof input.path === "string" ? input.path : undefined;
 	switch (toolName) {
 		case "read":
 		case "write":
 		case "edit":
-			return path === undefined ? undefined : privateRootFor(absolute(path, cwd), false);
+			return path === undefined ? undefined : rootFor(absolute(path, cwd), false, leaves);
 		case "ls":
-			return privateRootFor(absolute(path ?? ".", cwd), false);
+			return rootFor(absolute(path ?? ".", cwd), false, leaves);
 		case "grep":
 		case "find":
-			return privateRootFor(absolute(path ?? ".", cwd), true);
+			return rootFor(absolute(path ?? ".", cwd), true, leaves);
 		case "bash":
-			return typeof input.command === "string" ? rootInCommand(input.command, cwd) : undefined;
+			return typeof input.command === "string" ? rootInCommand(input.command, cwd, patterns) : undefined;
 		default:
 			return undefined;
 	}
+}
+
+export function blockedRoot(toolName: string, input: Record<string, unknown>, cwd: string): string | undefined {
+	return rootForCall(toolName, input, cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
 }
 
 export default function (pi: ExtensionAPI) {
@@ -430,8 +460,19 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 		}
+		// Secret roots are blocked on every model too: a secret never enters any model's context.
+		const secret = rootForCall(event.toolName, input, ctx.cwd, SECRET_LEAVES, SECRET_PATTERNS);
+		if (secret !== undefined) {
+			const shown = within(secret, HOME) ? `~/${relative(HOME, secret)}` : secret;
+			return {
+				block: true,
+				reason:
+					`private-guard: ${shown} is a secret, and a secret never enters any model's context, ` +
+					"local models included. Reference it by path, or ask the user to run it themselves.",
+			};
+		}
 		if (provider !== undefined && PRIVATE_PROVIDERS.has(provider)) return;
-		const root = blockedRoot(event.toolName, input, ctx.cwd);
+		const root = rootForCall(event.toolName, input, ctx.cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
 		if (root === undefined) return;
 		const shown = within(root, HOME) ? `~/${relative(HOME, root)}` : root;
 		return {
