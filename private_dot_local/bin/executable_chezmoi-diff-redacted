@@ -1,0 +1,22 @@
+#!/bin/sh
+# chezmoi-diff-redacted — run `chezmoi diff` and mask every string value from the user's
+# chezmoi template data.
+#
+# Secrets live in chezmoi.toml's [data]; run this instead of `chezmoi diff` so a rendered
+# secret never reaches the terminal or a model's context. It reads `chezmoi data` only to
+# build the redaction list: it never prints that data and never reads chezmoi.toml directly.
+# Arguments are passed through to `chezmoi diff`.
+set -eu
+
+data=$(chezmoi --no-pager data --format json)
+
+chezmoi --no-pager diff "$@" | jq -Rsr --argjson d "$data" '
+  reduce (
+    [ $d | del(.chezmoi)
+      | paths(type == "string") as $p
+      | {k: ($p | join(".")), v: getpath($p)} ]
+    | map(select(.v | length > 0))
+    | sort_by(-(.v | length))[]
+  ) as $x (.;
+    split($x.v) | join("<redacted:\($x.k)>")
+  )'

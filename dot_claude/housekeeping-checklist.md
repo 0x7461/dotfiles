@@ -37,16 +37,18 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   cm_dirty=$(chezmoi status 2>/dev/null | wc -l)
   if [ "$cm_dirty" -gt 0 ]; then
     # NOTE: paths from `chezmoi status` are relative to $HOME — they MUST be prefixed, or
-    # `chezmoi diff` resolves nothing, returns empty, and every entry is silently misclassified
-    # as mode-only. That hid real content drift on 2026-07-30 (a ~/.ssh/config edit that the
-    # next `chezmoi apply` would have reverted). Always verify a suspect file directly:
-    #   chezmoi diff ~/.ssh/config
+    # `chezmoi-diff-redacted` resolves nothing, returns empty, and every entry is silently
+    # misclassified as mode-only. That hid real content drift on 2026-07-30 (a ~/.ssh/config
+    # edit that the next `chezmoi apply` would have reverted). Always verify a suspect file
+    # directly. Use `chezmoi-diff-redacted`, never bare `chezmoi diff`: it masks every `[data]`
+    # value, so a rendered secret never appears (secrets are never shown, on any model).
+    #   chezmoi-diff-redacted ~/.ssh/config
     cm_content=$(chezmoi status 2>/dev/null | while IFS= read -r ln; do
-      chezmoi diff "$HOME/${ln:3}" 2>/dev/null | grep -q '^[-+][^-+]' && echo 1
+      chezmoi-diff-redacted "$HOME/${ln:3}" 2>/dev/null | grep -q '^[-+][^-+]' && echo 1
     done | wc -l)
     cm_mode=$((cm_dirty - cm_content))
     echo "⚠ chezmoi: $cm_dirty drifted ($cm_content content, $cm_mode mode-only)"
-    [ "$cm_content" -gt 0 ] && echo "  → run: chezmoi diff <file>; chezmoi re-add <file>"
+    [ "$cm_content" -gt 0 ] && echo "  → run: chezmoi-diff-redacted <file>; chezmoi re-add <file>"
     [ "$cm_mode" -gt 0 ] && echo "  → mode-only noise (umask 022 vs 002); fix systemically with: chezmoi re-add --recursive ~"
   fi
   ```
