@@ -64,7 +64,9 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 
 - [ ] Changed config file added to chezmoi (`chezmoi add <file>`)
 - [ ] **Secret-containing configs** (WireGuard `.conf`, `.env` files) — do NOT add to chezmoi; document location in obsidian-vault instead
-- [ ] Obsidian vault system doc updated (`~/obsidian-vault/system/<topic>.md`)
+- [ ] Obsidian vault system doc updated (`~/obsidian-vault/system/<topic>.md`). A **new** system note
+  is listed under exactly one theme in `system/README.md` (single-domain themes, 2026-10-06), and a
+  fact goes in the note about the thing it describes — no new catch-all notes like the retired `gotchas.md`.
 - [ ] reproducibility.md still accurate (new packages, changed steps)
 - [ ] packages.md updated if new packages installed
 
@@ -178,7 +180,11 @@ du -sh ~/.local/share/Trash "/run/media/ta/T7 Shield/.Trash-1000" 2>/dev/null
 ```
 
 - [ ] Surface contents + sizes for a keep/purge decision (user runs the empty command themselves).
-- Last emptied: never. **2026-09-28: 11 GB, 975 items** (4.9 GB of it the retired `~/.proto` +
+- **Last pruned 2026-10-06:** 968 of 997 items deleted (secret files + everything trashed before
+  2026-09-06, ~700 `~/archive` stories among them, user-approved), 29 kept (6.9 GB). Age rule from
+  `.trashinfo` `DeletionDate`. `gio remove trash:///<name>` is "Operation not supported" here and
+  CC's `rm -rf` is denied, so CC writes a script from a dry-run list and the user runs it.
+- Before that: never emptied. **2026-09-28: 11 GB, 975 items** (4.9 GB of it the retired `~/.proto` +
   `~/.bun`; 2.5 GB is trashed `~/archive` files — deleting those needs explicit OK). User approved
   emptying; CC's `rm -rf` on the trash was permission-denied, so the user runs it. `gio trash --list`
   fails here (`trash:: Operation not supported`). Earlier: **2026-09-24: 5.2 GB, 971 items, oldest 2023-01-14** —
