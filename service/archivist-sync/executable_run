@@ -3,7 +3,8 @@ exec 2>&1
 export HOME=/home/ta
 cd /home/ta/projects/archivist
 
-# On startup: catch up if last sync was missed (>16h ago)
+# On startup: catch up if last sync was missed (>16h ago), jittered so the boot
+# catch-ups across archivist-* don't all hit the account at once.
 python3 -c "
 import sqlite3, sys
 from datetime import datetime, timezone, timedelta
@@ -11,7 +12,7 @@ row = sqlite3.connect('/home/ta/.local/share/archivist/archivist.db').execute('S
 last = row[0]
 if not last: sys.exit(0)
 sys.exit(0 if datetime.now(timezone.utc) - datetime.fromisoformat(last) > timedelta(hours=16) else 1)
-" && /home/ta/projects/archivist/.venv/bin/archivist sync
+" && sleep "$(shuf -i 0-1800 -n1)" && /home/ta/projects/archivist/.venv/bin/archivist sync
 
 # Run daily at 01:00-04:00 (random hour) with up to 30min jitter
 exec snooze -R3h -H1 -M0 -J1800 \
