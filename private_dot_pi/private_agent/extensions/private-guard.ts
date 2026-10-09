@@ -511,6 +511,13 @@ function relativeAncestor(command: string, cwd: string, root: string): boolean {
 	});
 }
 
+// A path spelled from a working directory that sits above a root: "rel/" or "./rel".
+function relativeFromCwd(text: string, cwd: string, root: string): boolean {
+	if (!within(root, cwd) || root === cwd) return false;
+	const rel = escape(relative(cwd, root));
+	return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ROOT_AHEAD}`).test(quotedHeads(text));
+}
+
 // A path that names the working directory itself rather than a directory inside it.
 function atCwd(path: string): boolean {
 	return path === "." || path === "./" || path.startsWith("./");
@@ -604,32 +611,40 @@ function rootInCommand(
 	hiddenRoots: boolean,
 ): string | undefined {
 	const normalized = command.replace(/\/\.\//g, "/").replace(/\/{2,}/g, "/");
-	const bare = quotedHeads(normalized);
 	// Each statement with the working directory it runs in and the roots of any recursive search it
 	// holds. A `cd` target becomes the cwd for the statements after it, and a search is assessed
 	// against its own statement: a `~` in one command does not borrow a `find` from another, which
 	// used to block `cd ~ && grep -i x | find ~/projects -name y` as a credentials read.
 	let at = real(cwd);
-	const searches: { text: string; cwd: string; roots: string[] | undefined }[] = [];
+	const searches: { text: string; cwd: string; roots: string[] | undefined; skipsHidden: boolean }[] = [];
 	for (const segment of segments(normalized)) {
 		const next = cdTarget(segment, at);
 		if (next !== undefined) at = next;
+		// A statement reaches a root when its working directory is the root or inside it, or when it
+		// names a path from there into one. This catches `cd .config/deepseek && cat key`, which the
+		// recursive-search rules miss because `cat` is not a search.
+		const rooted = patterns.find(({ root }) => within(at, root) || relativeFromCwd(segment, at, root));
+		if (rooted !== undefined) return rooted.root;
 		if (!recursiveCommand(segment)) continue;
 		const search = searchRoots(segment, at);
-		// A hidden-skipping search cannot reach a secret root, which is always a dotdir.
-		const roots = search === undefined || (hiddenRoots && search.skipsHidden) ? undefined : search.paths;
-		searches.push({ text: segment, cwd: at, roots });
+		searches.push({ text: segment, cwd: at, roots: search?.paths, skipsHidden: search?.skipsHidden ?? false });
 	}
 	return patterns.find(({ root, own, above }) => {
 		if (anyMatch(normalized, own)) return true;
-		for (const { text, cwd: where, roots } of searches) {
+		for (const { text, cwd: where, roots, skipsHidden } of searches) {
 			if (anyMatch(text, above)) return true;
 			if (relativeAncestor(text, where, root)) return true;
-			if (roots?.some((r) => within(root, r) || within(r, root))) return true;
+			// A hidden-skipping search (rg without --hidden) does not descend a secret root, which is
+			// always a dotdir. Naming the root as an operand still reads it, so only an operand at or
+			// inside the root counts.
+			const hit =
+				roots !== undefined &&
+				(hiddenRoots && skipsHidden
+					? roots.some((r) => within(r, root))
+					: roots.some((r) => within(root, r) || within(r, root)));
+			if (hit) return true;
 		}
-		if (!within(root, cwd) || root === cwd) return false;
-		const rel = escape(relative(cwd, root));
-		return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ROOT_AHEAD}`).test(bare);
+		return false;
 	})?.root;
 }
 
