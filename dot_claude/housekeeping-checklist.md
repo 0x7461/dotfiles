@@ -101,7 +101,9 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 ## After guild changes
 
 - [ ] Binary rebuilt (`go build -o bin/<bot> ./cmd/<bot>/`)
-- [ ] Service restarted (`SVDIR=~/service sv restart <bot>`)
+- [ ] Restart only if needed. paperboy, scout and nagger run as `snooze … bin/<bot>`, which execs the
+  binary fresh at each fire, so a rebuild is live at the next run with no restart (and a restart
+  inside a snooze window can skip that day). Restart only a bot that runs as a long-lived daemon.
 - [ ] Bot token env vars set in .env
 
 ## Before remediating a failure that has a memory
