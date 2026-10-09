@@ -511,17 +511,122 @@ function relativeAncestor(command: string, cwd: string, root: string): boolean {
 	});
 }
 
+// A path that names the working directory itself rather than a directory inside it.
+function atCwd(path: string): boolean {
+	return path === "." || path === "./" || path.startsWith("./");
+}
+
+// ripgrep skips hidden and gitignored files, so a path-less `rg` from a directory above a root does
+// not reach the root's dotdirs; only its unrestricted forms do.
+const RG_UNRESTRICTED = new Set([
+	"--hidden",
+	"--no-ignore",
+	"--no-ignore-vcs",
+	"--no-ignore-dot",
+	"--unrestricted",
+]);
+
+// The working directory a `cd`/`pushd` statement moves to for the statements after it, or undefined
+// when the segment is not one.
+function cdTarget(segment: string, at: string): string | undefined {
+	const toks = tokens(segment);
+	const i = commandStart(toks, 0);
+	if (i >= toks.length) return undefined;
+	const head = base(toks[i]);
+	if (head !== "cd" && head !== "pushd") return undefined;
+	const args = toks.slice(i + 1);
+	if (args.includes("-")) return undefined; // the previous directory is not knowable here
+	const target = args.find((t) => !t.startsWith("-"));
+	if (target === undefined) return HOME;
+	return absolute(target.replace(/^\$\{?HOME\}?(?=\/|$)/, HOME), at);
+}
+
+// The directories a recursive command reads, by each verb's own convention: its path operands, or
+// the working directory when it names none. Undefined when the verb is not one whose roots this
+// guard tracks. `skipsHidden` marks a search that does not descend dotdirs, which matters only for
+// the secret roots, all of which are hidden.
+function searchRoots(segment: string, cwd: string): { paths: string[]; skipsHidden: boolean } | undefined {
+	const toks = tokens(segment);
+	const i = commandStart(toks, 0);
+	if (i >= toks.length) return undefined;
+	const head = base(toks[i]);
+	const args = toks.slice(i + 1);
+	const positional = args.filter((t) => t !== "--" && !t.startsWith("-"));
+	let paths: string[];
+	let defaultsToCwd = false;
+	let skipsHidden = false;
+	switch (head) {
+		case "find": {
+			let k = 0;
+			while (k < args.length && /^-[HLP]$/.test(args[k])) k++;
+			paths = [];
+			for (; k < args.length; k++) {
+				const t = args[k];
+				if (t.startsWith("-") || t === "!" || t === "(" || t === ")") break;
+				paths.push(t);
+			}
+			defaultsToCwd = true;
+			break;
+		}
+		case "grep":
+		case "rg":
+			paths = positional.slice(1); // the first positional is the pattern
+			defaultsToCwd = true;
+			skipsHidden = head === "rg" && !args.some((t) => RG_UNRESTRICTED.has(t) || /^-[a-zA-Z]*u/.test(t));
+			break;
+		case "du":
+		case "tree":
+			paths = positional;
+			defaultsToCwd = true;
+			break;
+		case "tar":
+			paths = positional.filter(atCwd);
+			break;
+		case "cp":
+		case "mv":
+		case "rsync":
+			paths = positional.slice(0, -1); // the last positional is the destination
+			break;
+		default:
+			return undefined;
+	}
+	const resolved = paths.length === 0 ? (defaultsToCwd ? [cwd] : []) : paths.map((p) => absolute(p, cwd));
+	return { paths: resolved, skipsHidden };
+}
+
 // A root as a shell command could spell it, or, for a recursive command, a directory above one.
 // The relative forms keep only the first word of a quoted string, so a bare name in a message
 // does not match.
-function rootInCommand(command: string, cwd: string, patterns: RootPattern[]): string | undefined {
+function rootInCommand(
+	command: string,
+	cwd: string,
+	patterns: RootPattern[],
+	hiddenRoots: boolean,
+): string | undefined {
 	const normalized = command.replace(/\/\.\//g, "/").replace(/\/{2,}/g, "/");
 	const bare = quotedHeads(normalized);
-	const recursive = recursiveCommand(normalized);
+	// Each statement with the working directory it runs in and the roots of any recursive search it
+	// holds. A `cd` target becomes the cwd for the statements after it, and a search is assessed
+	// against its own statement: a `~` in one command does not borrow a `find` from another, which
+	// used to block `cd ~ && grep -i x | find ~/projects -name y` as a credentials read.
+	let at = real(cwd);
+	const searches: { text: string; cwd: string; roots: string[] | undefined }[] = [];
+	for (const segment of segments(normalized)) {
+		const next = cdTarget(segment, at);
+		if (next !== undefined) at = next;
+		if (!recursiveCommand(segment)) continue;
+		const search = searchRoots(segment, at);
+		// A hidden-skipping search cannot reach a secret root, which is always a dotdir.
+		const roots = search === undefined || (hiddenRoots && search.skipsHidden) ? undefined : search.paths;
+		searches.push({ text: segment, cwd: at, roots });
+	}
 	return patterns.find(({ root, own, above }) => {
 		if (anyMatch(normalized, own)) return true;
-		if (recursive && anyMatch(normalized, above)) return true;
-		if (recursive && relativeAncestor(normalized, cwd, root)) return true;
+		for (const { text, cwd: where, roots } of searches) {
+			if (anyMatch(text, above)) return true;
+			if (relativeAncestor(text, where, root)) return true;
+			if (roots?.some((r) => within(root, r) || within(r, root))) return true;
+		}
 		if (!within(root, cwd) || root === cwd) return false;
 		const rel = escape(relative(cwd, root));
 		return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ROOT_AHEAD}`).test(bare);
@@ -529,13 +634,15 @@ function rootInCommand(command: string, cwd: string, patterns: RootPattern[]): s
 }
 
 // The root a tool call reaches, or undefined. `leaves` answers path containment, `patterns` the
-// command-line spellings.
+// command-line spellings, and `hiddenRoots` says the patterns are all dotdirs, so a hidden-skipping
+// search does not descend into any of them.
 function rootForCall(
 	toolName: string,
 	input: Record<string, unknown>,
 	cwd: string,
 	leaves: string[],
 	patterns: RootPattern[],
+	hiddenRoots: boolean,
 ): string | undefined {
 	const inside = rootFor(real(cwd), false, leaves);
 	if (inside) return inside;
@@ -551,14 +658,14 @@ function rootForCall(
 		case "find":
 			return rootFor(absolute(path ?? ".", cwd), true, leaves);
 		case "bash":
-			return typeof input.command === "string" ? rootInCommand(input.command, cwd, patterns) : undefined;
+			return typeof input.command === "string" ? rootInCommand(input.command, cwd, patterns, hiddenRoots) : undefined;
 		default:
 			return undefined;
 	}
 }
 
 export function blockedRoot(toolName: string, input: Record<string, unknown>, cwd: string): string | undefined {
-	return rootForCall(toolName, input, cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
+	return rootForCall(toolName, input, cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS, false);
 }
 
 export default function (pi: ExtensionAPI) {
@@ -601,7 +708,7 @@ export default function (pi: ExtensionAPI) {
 			};
 		}
 		// Secret roots are blocked on every model too: a secret never enters any model's context.
-		const secret = rootForCall(event.toolName, input, ctx.cwd, SECRET_LEAVES, SECRET_PATTERNS);
+		const secret = rootForCall(event.toolName, input, ctx.cwd, SECRET_LEAVES, SECRET_PATTERNS, true);
 		if (secret !== undefined) {
 			const shown = within(secret, HOME) ? `~/${relative(HOME, secret)}` : secret;
 			return {
@@ -613,7 +720,7 @@ export default function (pi: ExtensionAPI) {
 			};
 		}
 		if (isPrivateModel(provider, ctx.model?.id)) return;
-		const root = rootForCall(event.toolName, input, ctx.cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
+		const root = rootForCall(event.toolName, input, ctx.cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS, false);
 		if (root === undefined) return;
 		const shown = within(root, HOME) ? `~/${relative(HOME, root)}` : root;
 		return {
