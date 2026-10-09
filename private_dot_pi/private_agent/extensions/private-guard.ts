@@ -6,14 +6,50 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 // Blocks the agent's tool calls that would read private files. Secret roots and chezmoi's rendered
 // [data] are blocked on every model, a local one included: a secret never enters any model's
 // context. The remaining private roots (PII) are blocked only while the session's model is not
-// private, so PII stays off DeepSeek, Go and any other provider that trains on or retains inputs.
-// Fails closed: an unknown provider, or no model at all, counts as not private. A guardrail
+// private, so PII stays off direct DeepSeek and any other provider that trains on or retains inputs.
+// Fails closed: an unknown provider or model, or no model at all, counts as not private. A guardrail
 // against accidents, not a wall: a glob, a path built in a shell variable, or a script can still
 // reach a private file indirectly.
 const HOME = homedir();
 
 // Providers whose requests stay on this machine.
 const PRIVATE_PROVIDERS = new Set(["ollama"]);
+
+// Remote models whose stated terms are no training and 0-day retention, by provider. OpenCode Go per
+// https://opencode.ai/docs/go/, checked 2026-10-09; inert until Go is subscribed. Left out: 30-day
+// retention (Grok, GPT Luna), training on prompts (Muse Spark Contributor), and the free previews,
+// which can be short-lived feedback programs. DeepSeek's zero-retention agreement with Go is renewed
+// monthly (valid through 2026-10-31 when checked): recheck the page each month, drop the deepseek
+// ids if it lapses.
+const PRIVATE_MODELS: Record<string, Set<string>> = {
+	"opencode-go": new Set([
+		"deepseek-v4-flash",
+		"deepseek-v4-pro",
+		"deepseek-v4.1-flash",
+		"glm-5.2",
+		"glm-5.3",
+		"glm-5.3-flash",
+		"hy3",
+		"kimi-k2.7-code",
+		"kimi-k3",
+		"longcat-2.0",
+		"mimo-v2.5",
+		"mimo-v2.5-pro",
+		"mimo-v2.6-flash",
+		"mimo-v2.6-pro",
+		"minimax-m2.7",
+		"minimax-m3",
+		"qwen3.7-plus",
+		"qwen3.8-flash",
+		"qwen3.8-max",
+	]),
+};
+
+export function isPrivateModel(provider: string | undefined, id: string | undefined): boolean {
+	if (provider === undefined) return false;
+	if (PRIVATE_PROVIDERS.has(provider)) return true;
+	return id !== undefined && (PRIVATE_MODELS[provider]?.has(id) ?? false);
+}
 
 // chezmoi.toml's [data] holds secrets, and these subcommands render them — or the target state that
 // embeds them — to stdout. They are blocked on every model, ollama included: a secret never enters
@@ -576,15 +612,16 @@ export default function (pi: ExtensionAPI) {
 					"itself, as status.ts does, or from the user running the command.",
 			};
 		}
-		if (provider !== undefined && PRIVATE_PROVIDERS.has(provider)) return;
+		if (isPrivateModel(provider, ctx.model?.id)) return;
 		const root = rootForCall(event.toolName, input, ctx.cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
 		if (root === undefined) return;
 		const shown = within(root, HOME) ? `~/${relative(HOME, root)}` : root;
 		return {
 			block: true,
 			reason:
-				`private-guard: ${shown} is private and the model (${provider ?? "none"}) is not. ` +
-				"Do not retry another way. Ask the user to switch to a local model or to run it themselves.",
+				`private-guard: ${shown} is private and the model (${provider ?? "none"}/${ctx.model?.id ?? "none"}) ` +
+				"is not. Do not retry another way. Ask the user to switch to a private model (local ollama, or " +
+				"an allowlisted OpenCode Go model) or to run it themselves.",
 		};
 	});
 }
