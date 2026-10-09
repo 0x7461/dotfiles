@@ -62,7 +62,7 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
 
 ## After config/system changes
 
-- [ ] **Edit went to the chezmoi source, not the live file?** Every managed target under `$HOME` is a copy of `~/.local/share/chezmoi/...` (`.config`, `service/`, `.claude`, `.pi`, `.local/bin`, `.theme`, …). Edit the source (`chezmoi edit <target>`) → `chezmoi apply`; a live edit is drift the next `apply` reverts. Already edited live? `chezmoi re-add <target>` — **never a `.tmpl` target**, which writes the rendered secret into the source. New config in `$HOME` → `chezmoi add <file>`.
+- [ ] **Edit went to the chezmoi source, not the live file?** Every managed target under `$HOME` is a copy of `~/.local/share/chezmoi/...` — configs, dotfiles, `~/service`, `~/.local`, `.claude`/`.pi`/`.gemini`. Locate the source with `chezmoi source-path <target>` (not `chezmoi edit`, which opens `$EDITOR`), edit it there, `chezmoi apply`. A live edit is drift the next `apply` reverts. Already edited live? `chezmoi re-add <target>` — **never a `.tmpl` target**, which writes the rendered secret into the source. New config in `$HOME` → `chezmoi add <file>`.
 - [ ] **Secret-containing configs** (WireGuard `.conf`, `.env` files) — do NOT add to chezmoi; document location in obsidian-vault instead
 - [ ] Obsidian vault system doc updated (`~/obsidian-vault/system/<topic>.md`). A **new** system note
   is listed under exactly one theme in `system/README.md` (single-domain themes, 2026-10-06), and a
