@@ -125,12 +125,11 @@ delete this section.
 - [ ] **Store committed and pushed.** Memory now lives in ithaca, so /housekeeping is its commit
   path: `git -C ~/projects/ithaca status -sb` — commit memory/rule edits from this session,
   then `git push` (the private remote is the only off-site copy).
-- [ ] **Links intact:** `readlink ~/.agents` → `/home/ta/projects/ithaca/store`, and
-  `find ~/.agents -maxdepth 3 -xtype l` prints nothing (no store-internal dangling links).
-  ⚠ On pi a `find` over `~/.claude` is blocked by `private-guard` (it resolves
-  `~/.claude/.credentials.json`), so check the CC-side symlinks by name instead:
-  `for l in ~/.claude/{CLAUDE.md,rules,scripts,skills,output-styles,hooks}; do [ -e "$l" ] || echo "DANGLING $l"; done`
-  (`debug/latest` is CC's own and often dangles — not a failure.)
+- [ ] **Store self-check** — `python3 ~/.agents/scripts/store-check.py`. Exit 0 = clean, 1 names every
+  finding: a link or `~/` path that does not resolve, an adapter symlink off the store, a harness tag
+  that leaks into a harness which will not drop it, a composer that fell behind. It also folds in
+  `memcheck.py` (name == stem, description/type, `[[links]]` resolve, MEMORY.md matches disk both
+  ways) and prints the injected size. Fix what it reports before finishing — all are mechanical.
   `chezmoi status` clean for `.claude` / `.agents` paths.
 - [ ] **CC saved a memory this session?** Confirm it landed in `store/memory/` (it shows in
   ithaca's `git status`). The first confirmed save clears AGENTS.md "Untested: CC saving a
@@ -152,7 +151,7 @@ delete this section.
   - Cross-project rules → CLAUDE.md if machine-bound, `~/.claude/rules/behaviour.md` if portable
     (split 2026-09-29; both load in CC natively and in pi via `store-context.ts`)
 - [ ] No session-specific context saved to durable docs
-- [ ] **Memory store integrity** — run `python3 ~/.claude/scripts/memcheck.py`. Exit 0 = clean; it validates `name:` == filename stem, description/type present, `[[links]]` resolve, and that MEMORY.md matches disk both ways. Fix anything it reports before finishing (all are mechanical). If a memory was added this session, it also catches a missing index entry.
+- [ ] **Memory store integrity** — run `python3 ~/.agents/scripts/memcheck.py`. Folds into `store-check.py` above; run it standalone to see the per-memory detail memcheck itself prints (name == filename stem, description/type present, `[[links]]` resolve, MEMORY.md matches disk both ways). Fix anything it reports before finishing (all are mechanical). If a memory was added this session, it also catches a missing index entry.
 - [ ] MEMORY.md is index-only and under 200 lines — one line per memory, no content blocks, and no mirroring of harness-supplied facts (model IDs, tool names) that only go stale
 - [ ] **Glossary upkeep (#56)** — did this session coin/use a new shared-vocabulary term (project codename, tool shorthand, recurring abbreviation, or a person/place alias)? Offer to add it, routing by sensitivity:
   - **Public** (codenames, tools, abbrevs) → `~/obsidian-vault/system/glossary.md` (loads globally via the `~/.claude/rules/glossary.md` symlink; **public terms only** — its contents ship to whatever model backs the session)
