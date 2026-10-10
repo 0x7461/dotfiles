@@ -16,3 +16,6 @@ if status is-interactive
 else
 	mise activate fish --shims | source
 end
+
+# Pi
+fish_add_path "/home/ta/.pi/agent/bin"
