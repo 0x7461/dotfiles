@@ -5,15 +5,24 @@ cd /home/ta/projects/archivist
 
 # On startup: catch up if last facebook stories sync was missed (>16h ago),
 # jittered so the boot catch-ups across archivist-* don't all hit the account at
-# once.
-python3 -c "
+# once. This runs before `exec snooze`, so ./finish (which fires when the run
+# script exits) never sees it — record the outcome here, or caretaker reads the
+# service as OVERDUE even though the sync ran.
+if python3 -c "
 import sqlite3, sys
 from datetime import datetime, timezone, timedelta
 row = sqlite3.connect('/home/ta/.local/share/archivist/archivist.db').execute(\"SELECT MAX(last_sync) FROM accounts WHERE platform='facebook'\").fetchone()
 last = row[0]
 if not last: sys.exit(0)
 sys.exit(0 if datetime.now(timezone.utc) - datetime.fromisoformat(last) > timedelta(hours=16) else 1)
-" && sleep "$(shuf -i 0-1800 -n1)" && /home/ta/projects/archivist/.venv/bin/archivist sync --only stories
+"; then
+  sleep "$(shuf -i 0-1800 -n1)"
+  /home/ta/projects/archivist/.venv/bin/archivist sync --only stories
+  rc=$?
+  runs="${HOME:-/home/ta}/.cache/caretaker/runs/archivist-stories"
+  mkdir -p "$(dirname "$runs")"
+  printf '%s 0 %s\n' "$rc" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$runs"
+fi
 
 # Run twice daily (every 12h) at random times with 30min jitter
 # Stories expire in 24h — checking every 12h gives comfortable margin
