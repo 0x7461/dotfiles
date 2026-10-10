@@ -217,11 +217,28 @@ window-rule {
     opacity 0.96
 }
 
-// Terminals: open at full column width (visual parity with how firefox feels)
+// Terminals: open at full column width.
 window-rule {
     match app-id="com.mitchellh.ghostty"
     match app-id="foot"
     default-column-width { proportion 1.0; }
+}
+
+// Firefox and Telegram open maximized (same as Mod+M), instead of inheriting
+// layout's 0.5 default-column-width. Excluded: the auxiliary windows whose
+// floating rules above give them their own size — a later rule cannot unset
+// open-maximized, so the exclusion must be explicit.
+window-rule {
+    match app-id=r#"^(Firefox|firefox)$"#
+    exclude title="^Library$"
+    exclude title="^Extension:"
+    exclude title="^Picture-in-Picture$"
+    open-maximized true
+}
+window-rule {
+    match app-id=r#"^org\.telegram\.desktop$"#
+    exclude title="^Media viewer$"
+    open-maximized true
 }
 
 window-rule {
