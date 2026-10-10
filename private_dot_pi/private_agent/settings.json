@@ -4,5 +4,8 @@
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-flash",
   "defaultThinkingLevel": "medium",
-  "packages": []
+  "packages": [],
+  "compaction": {
+    "enabled": false
+  }
 }
