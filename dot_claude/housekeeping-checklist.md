@@ -3,8 +3,8 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-09-18 (added the pre-check-before-remediation section after walking into the Camoufox lock trap a second time, plus the output-styles and two-owner config checks)
-**Last CC cleanup:** 2026-09-24 (memcheck clean at 82; CLAUDE.md 112/200 lines; MEMORY.md 98 lines / 14,635 bytes)
+**Last reviewed:** 2026-10-10 (pi-cutover pass: a `find` over `~/.claude` is now blocked by `private-guard`, so the CC-side symlinks are checked by name instead)
+**Last store cleanup:** 2026-10-10 (memcheck clean at 90; AGENTS.md 78/200 lines; MEMORY.md 105 lines / 9,629 bytes; settings review pending — that half was CC's)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[caretaker]] (`~/projects/caretaker/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
@@ -126,8 +126,11 @@ delete this section.
   path: `git -C ~/projects/ithaca status -sb` — commit memory/rule edits from this session,
   then `git push` (the private remote is the only off-site copy).
 - [ ] **Links intact:** `readlink ~/.agents` → `/home/ta/projects/ithaca/store`, and
-  `find ~/.claude ~/.agents -maxdepth 3 -xtype l -not -path '*/debug/*'` prints nothing (no
-  dangling links; `debug/latest` is CC's own and often dangles).
+  `find ~/.agents -maxdepth 3 -xtype l` prints nothing (no store-internal dangling links).
+  ⚠ On pi a `find` over `~/.claude` is blocked by `private-guard` (it resolves
+  `~/.claude/.credentials.json`), so check the CC-side symlinks by name instead:
+  `for l in ~/.claude/{CLAUDE.md,rules,scripts,skills,output-styles,hooks}; do [ -e "$l" ] || echo "DANGLING $l"; done`
+  (`debug/latest` is CC's own and often dangles — not a failure.)
   `chezmoi status` clean for `.claude` / `.agents` paths.
 - [ ] **CC saved a memory this session?** Confirm it landed in `store/memory/` (it shows in
   ithaca's `git status`). The first confirmed save clears AGENTS.md "Untested: CC saving a
