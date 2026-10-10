@@ -3,6 +3,10 @@ import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
+// Regression suite: private-guard.test/ (run.mjs + cases.json). Run it after any change:
+//   node ~/.pi/agent/extensions/private-guard.test/run.mjs
+// Add a case to cases.json for every new rule, or the rule ships untested.
+//
 // Blocks the agent's tool calls that would read private files. Secret roots and chezmoi's rendered
 // [data] are blocked on every model, a local one included: a secret never enters any model's
 // context. The remaining private roots (PII) are blocked only while the session's model is not
