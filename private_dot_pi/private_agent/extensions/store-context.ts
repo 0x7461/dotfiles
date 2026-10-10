@@ -19,16 +19,46 @@ function withoutFrontmatter(text: string): string {
 	return text.replace(/^---\n[\s\S]*?\n---\n/, "");
 }
 
+// A line only one harness can act on is wrapped in `<!-- harness:cc -->` … `<!-- /harness -->`.
+// This adapter drops every block not tagged `pi`, so a CC path, tool or flag never reaches pi's
+// prompt — an instruction naming something the harness lacks invites work in the wrong place.
+// CC needs no filter: it reads the file whole through its symlink, where the markers are inert.
+const HARNESS = "pi";
+const OPEN = /^\s*<!--\s*harness:([a-z0-9_-]+)\s*-->\s*$/;
+const CLOSE = /^\s*<!--\s*\/harness\s*-->\s*$/;
+
+function forHarness(text: string, harness = HARNESS): string {
+	const kept: string[] = [];
+	let skipping: string | null = null;
+	for (const line of text.split("\n")) {
+		const open = OPEN.exec(line);
+		if (open) {
+			if (skipping !== null) throw new Error(`nested harness block inside "${skipping}"`);
+			skipping = open[1] ?? "";
+			continue;
+		}
+		if (CLOSE.test(line)) {
+			if (skipping === null) throw new Error("closing <!-- /harness --> with nothing open");
+			skipping = null;
+			continue;
+		}
+		if (skipping === null || skipping === harness) kept.push(line);
+	}
+	if (skipping !== null) throw new Error(`harness block "${skipping}" is never closed`);
+	// Dropping a block can leave a run of blank lines behind.
+	return kept.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
 function storeContext(sessionId: string): string {
 	const rules = readdirSync(RULES_DIR)
 		.filter((name) => name.endsWith(".md"))
 		.sort()
 		.map((name) => join(RULES_DIR, name));
 	const files = [join(STORE, "AGENTS.md"), ...rules, OUTPUT_STYLE].map(
-		(path) => `<!-- ${path} -->\n${withoutFrontmatter(readFileSync(path, "utf8"))}`,
+		(path) => `<!-- ${path} -->\n${forHarness(withoutFrontmatter(readFileSync(path, "utf8")))}`,
 	);
 	const index = join(MEMORY_DIR, "MEMORY.md");
-	const memory = `<!-- ${index} -->\nMemory folder: ${MEMORY_DIR}/ — read a file there when its index line looks relevant.\n\n${readFileSync(index, "utf8")}`;
+	const memory = `<!-- ${index} -->\nMemory folder: ${MEMORY_DIR}/ — read a file there when its index line looks relevant.\n\n${forHarness(readFileSync(index, "utf8"))}`;
 	const session = `pi session id: ${sessionId} — use it as the session-id in a memory's metadata.evidence line.`;
 	return [...files, memory, session].join("\n\n");
 }
