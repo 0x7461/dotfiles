@@ -19,3 +19,7 @@ end
 
 # Pi
 fish_add_path "/home/ta/.pi/agent/bin"
+
+# Claude Code: auto-compact off, whatever settings.json says. The /config toggle
+# went missing once (found 2026-10-10); manual /compact still works.
+set -gx DISABLE_AUTO_COMPACT 1
