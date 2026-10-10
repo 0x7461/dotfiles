@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -518,6 +518,18 @@ function relativeFromCwd(text: string, cwd: string, root: string): boolean {
 	return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ROOT_AHEAD}`).test(quotedHeads(text));
 }
 
+// A path-shaped token (one holding a "/" or starting with ".") that resolves into the root from the
+// working directory. This catches what the spelled forms miss: a relative file root
+// (".pi/agent/auth.json", no "/" after it) and a path that climbs first ("../.ssh/config"). A
+// redirection or a "--flag=" before the path is stripped.
+function pathTokenInRoot(segment: string, cwd: string, root: string): boolean {
+	return tokens(segment).some((t) => {
+		const p = t.replace(/^[0-9]*[<>]+/, "").replace(/^[^/=]*=/, "");
+		if (!(p.includes("/") || p.startsWith(".")) || p.includes("://")) return false;
+		return within(absolute(p, cwd), root);
+	});
+}
+
 // A path that names the working directory itself rather than a directory inside it.
 function atCwd(path: string): boolean {
 	return path === "." || path === "./" || path.startsWith("./");
@@ -548,16 +560,49 @@ function cdTarget(segment: string, at: string): string | undefined {
 	return absolute(target.replace(/^\$\{?HOME\}?(?=\/|$)/, HOME), at);
 }
 
+// git subcommands that print file contents from history. `log` counts only with a patch flag.
+const GIT_CONTENT = new Set(["show", "diff", "grep", "blame", "cat-file", "archive", "format-patch", "whatchanged"]);
+const GIT_PATCH_FLAG = /^(-p|-u|--patch|--patch-with-stat|--cc|-c)$/;
+
+// The paths a content-printing git call reads: its pathspecs when it names any, otherwise the whole
+// repository (`-C` or the working directory). A positional is a pathspec when it follows "--" or
+// names a file that exists, the same test git itself uses to tell a path from a revision.
+function gitContentPaths(args: string[], cwd: string): string[] | undefined {
+	let repo = cwd;
+	let k = 0;
+	while (k < args.length && args[k].startsWith("-")) {
+		if (args[k] === "-C" && k + 1 < args.length) {
+			repo = absolute(args[k + 1], repo);
+			k += 2;
+		} else {
+			k += args[k] === "-c" || args[k] === "--git-dir" || args[k] === "--work-tree" ? 2 : 1;
+		}
+	}
+	const sub = args[k];
+	const rest = args.slice(k + 1);
+	if (!(GIT_CONTENT.has(sub) || (sub === "log" && rest.some((t) => GIT_PATCH_FLAG.test(t))))) return undefined;
+	const dash = rest.indexOf("--");
+	const named = dash === -1 ? rest.filter((t) => !t.startsWith("-") && existsSync(resolve(repo, t))) : rest.slice(dash + 1);
+	return named.length > 0 ? named.map((p) => absolute(p, repo)) : [repo];
+}
+
 // The directories a recursive command reads, by each verb's own convention: its path operands, or
 // the working directory when it names none. Undefined when the verb is not one whose roots this
-// guard tracks. `skipsHidden` marks a search that does not descend dotdirs, which matters only for
-// the secret roots, all of which are hidden.
-function searchRoots(segment: string, cwd: string): { paths: string[]; skipsHidden: boolean } | undefined {
+// guard tracks. `skipsHidden` marks a search that does not descend dotdirs. `operandsOnly` marks a
+// command whose paths are exact, so naming a directory above a root does not count by itself.
+function searchRoots(
+	segment: string,
+	cwd: string,
+): { paths: string[]; skipsHidden: boolean; operandsOnly: boolean } | undefined {
 	const toks = tokens(segment);
 	const i = commandStart(toks, 0);
 	if (i >= toks.length) return undefined;
 	const head = base(toks[i]);
 	const args = toks.slice(i + 1);
+	if (head === "git") {
+		const paths = gitContentPaths(args, cwd);
+		return paths === undefined ? undefined : { paths, skipsHidden: false, operandsOnly: true };
+	}
 	const positional = args.filter((t) => t !== "--" && !t.startsWith("-"));
 	let paths: string[];
 	let defaultsToCwd = false;
@@ -598,50 +643,61 @@ function searchRoots(segment: string, cwd: string): { paths: string[]; skipsHidd
 			return undefined;
 	}
 	const resolved = paths.length === 0 ? (defaultsToCwd ? [cwd] : []) : paths.map((p) => absolute(p, cwd));
-	return { paths: resolved, skipsHidden };
+	return { paths: resolved, skipsHidden, operandsOnly: false };
+}
+
+// A hidden-skipping search from `from` does not reach `root` when a dotdir lies between them.
+function hiddenBetween(from: string, root: string): boolean {
+	return relative(from, root).split(sep).some((c) => c.startsWith("."));
 }
 
 // A root as a shell command could spell it, or, for a recursive command, a directory above one.
 // The relative forms keep only the first word of a quoted string, so a bare name in a message
 // does not match.
-function rootInCommand(
-	command: string,
-	cwd: string,
-	patterns: RootPattern[],
-	hiddenRoots: boolean,
-): string | undefined {
+function rootInCommand(command: string, cwd: string, patterns: RootPattern[]): string | undefined {
 	const normalized = command.replace(/\/\.\//g, "/").replace(/\/{2,}/g, "/");
 	// Each statement with the working directory it runs in and the roots of any recursive search it
 	// holds. A `cd` target becomes the cwd for the statements after it, and a search is assessed
 	// against its own statement: a `~` in one command does not borrow a `find` from another, which
 	// used to block `cd ~ && grep -i x | find ~/projects -name y` as a credentials read.
 	let at = real(cwd);
-	const searches: { text: string; cwd: string; roots: string[] | undefined; skipsHidden: boolean }[] = [];
+	const searches: {
+		text: string;
+		cwd: string;
+		roots: string[] | undefined;
+		skipsHidden: boolean;
+		operandsOnly: boolean;
+	}[] = [];
 	for (const segment of segments(normalized)) {
 		const next = cdTarget(segment, at);
 		if (next !== undefined) at = next;
 		// A statement reaches a root when its working directory is the root or inside it, or when it
 		// names a path from there into one. This catches `cd .config/deepseek && cat key`, which the
 		// recursive-search rules miss because `cat` is not a search.
-		const rooted = patterns.find(({ root }) => within(at, root) || relativeFromCwd(segment, at, root));
+		const rooted = patterns.find(
+			({ root }) => within(at, root) || relativeFromCwd(segment, at, root) || pathTokenInRoot(segment, at, root),
+		);
 		if (rooted !== undefined) return rooted.root;
-		if (!recursiveCommand(segment)) continue;
 		const search = searchRoots(segment, at);
-		searches.push({ text: segment, cwd: at, roots: search?.paths, skipsHidden: search?.skipsHidden ?? false });
+		if (!recursiveCommand(segment) && !search?.operandsOnly) continue;
+		searches.push({
+			text: segment,
+			cwd: at,
+			roots: search?.paths,
+			skipsHidden: search?.skipsHidden ?? false,
+			operandsOnly: search?.operandsOnly ?? false,
+		});
 	}
 	return patterns.find(({ root, own, above }) => {
 		if (anyMatch(normalized, own)) return true;
-		for (const { text, cwd: where, roots, skipsHidden } of searches) {
-			if (anyMatch(text, above)) return true;
-			if (relativeAncestor(text, where, root)) return true;
-			// A hidden-skipping search (rg without --hidden) does not descend a secret root, which is
-			// always a dotdir. Naming the root as an operand still reads it, so only an operand at or
-			// inside the root counts.
+		for (const { text, cwd: where, roots, skipsHidden, operandsOnly } of searches) {
+			if (!operandsOnly && (anyMatch(text, above) || relativeAncestor(text, where, root))) return true;
+			// A hidden-skipping search (rg without --hidden) does not descend a dotdir, so it reaches a
+			// root below its operand only when no dotdir lies between them. An operand at or inside the
+			// root always reads it.
 			const hit =
 				roots !== undefined &&
-				(hiddenRoots && skipsHidden
-					? roots.some((r) => within(r, root))
-					: roots.some((r) => within(root, r) || within(r, root)));
+				roots.some((r) => within(r, root) || (within(root, r) && !(skipsHidden && hiddenBetween(r, root))));
 			if (hit) return true;
 		}
 		return false;
@@ -649,15 +705,13 @@ function rootInCommand(
 }
 
 // The root a tool call reaches, or undefined. `leaves` answers path containment, `patterns` the
-// command-line spellings, and `hiddenRoots` says the patterns are all dotdirs, so a hidden-skipping
-// search does not descend into any of them.
+// command-line spellings.
 function rootForCall(
 	toolName: string,
 	input: Record<string, unknown>,
 	cwd: string,
 	leaves: string[],
 	patterns: RootPattern[],
-	hiddenRoots: boolean,
 ): string | undefined {
 	const inside = rootFor(real(cwd), false, leaves);
 	if (inside) return inside;
@@ -673,14 +727,14 @@ function rootForCall(
 		case "find":
 			return rootFor(absolute(path ?? ".", cwd), true, leaves);
 		case "bash":
-			return typeof input.command === "string" ? rootInCommand(input.command, cwd, patterns, hiddenRoots) : undefined;
+			return typeof input.command === "string" ? rootInCommand(input.command, cwd, patterns) : undefined;
 		default:
 			return undefined;
 	}
 }
 
 export function blockedRoot(toolName: string, input: Record<string, unknown>, cwd: string): string | undefined {
-	return rootForCall(toolName, input, cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS, false);
+	return rootForCall(toolName, input, cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
 }
 
 export default function (pi: ExtensionAPI) {
@@ -723,7 +777,7 @@ export default function (pi: ExtensionAPI) {
 			};
 		}
 		// Secret roots are blocked on every model too: a secret never enters any model's context.
-		const secret = rootForCall(event.toolName, input, ctx.cwd, SECRET_LEAVES, SECRET_PATTERNS, true);
+		const secret = rootForCall(event.toolName, input, ctx.cwd, SECRET_LEAVES, SECRET_PATTERNS);
 		if (secret !== undefined) {
 			const shown = within(secret, HOME) ? `~/${relative(HOME, secret)}` : secret;
 			return {
@@ -735,7 +789,7 @@ export default function (pi: ExtensionAPI) {
 			};
 		}
 		if (isPrivateModel(provider, ctx.model?.id)) return;
-		const root = rootForCall(event.toolName, input, ctx.cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS, false);
+		const root = rootForCall(event.toolName, input, ctx.cwd, PRIVATE_LEAVES, PRIVATE_PATTERNS);
 		if (root === undefined) return;
 		const shown = within(root, HOME) ? `~/${relative(HOME, root)}` : root;
 		return {
