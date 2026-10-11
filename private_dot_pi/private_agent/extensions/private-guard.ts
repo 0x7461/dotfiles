@@ -16,8 +16,18 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 // reach a private file indirectly.
 const HOME = homedir();
 
-// Providers whose requests stay on this machine.
-const PRIVATE_PROVIDERS = new Set(["ollama"]);
+// Providers the private tier accepts. `ollama` never leaves this machine. The other two are remote
+// and accepted on their stated terms, checked against the providers' own pages 2026-10-11 (recorded
+// in `agent_docs/pi-setup.md` § "The private tier's terms"): Anthropic does not train on consumer
+// prompts unless the account's "improve Claude" setting is on, and retains 30 days with it off (the
+// commercial API never trains, and offers ZDR to eligible accounts); OpenAI's personal ChatGPT/Codex
+// trains only while "Improve the model for everyone" is on, with Codex's own "Include environments"
+// switch on top. Both are conditional on account settings this file cannot read, so keeping them off
+// is the account owner's job. Deliberately absent: Gemini (72-hour retention and human review for
+// safety, and Google suspends AI Pro accounts that drive third-party tools) and every free preview
+// tier, which can be a short-lived feedback program. A provider id that does not match pi's own key
+// simply stays non-private — the guard fails closed.
+const PRIVATE_PROVIDERS = new Set(["ollama", "anthropic", "openai"]);
 
 // Remote models whose stated terms are no training and 0-day retention, by provider. OpenCode Go per
 // https://opencode.ai/docs/go/, checked 2026-10-09; inert until Go is subscribed. Left out: 30-day

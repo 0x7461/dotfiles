@@ -24,6 +24,9 @@ const HOME = process.env.HOME;
 const MODELS = {
 	deepseek: { provider: "deepseek", id: "deepseek-flash" },
 	ollama: { provider: "ollama", id: "gemma4" },
+	anthropic: { provider: "anthropic", id: "claude-sonnet-5" },
+	openai: { provider: "openai", id: "gpt-6-luna" },
+	google: { provider: "google", id: "gemini-3.8-flash" },
 };
 
 const cases = JSON.parse(readFileSync(casesPath, "utf8"));
