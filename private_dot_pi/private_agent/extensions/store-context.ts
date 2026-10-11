@@ -27,6 +27,20 @@ const HARNESS = "pi";
 const OPEN = /^\s*<!--\s*harness:([a-z0-9_-]+)\s*-->\s*$/;
 const CLOSE = /^\s*<!--\s*\/harness\s*-->\s*$/;
 
+// A kill-switch, for answering "what does the store actually inject" without editing this file.
+// It must not be silent: ui.notify is a no-op under `-p`, so the prompt itself says the store is
+// off. A session running without the rules is the failure the store exists to prevent, and it is
+// the headless run — the one that cannot see a notification — that would hide it.
+const OFF_VALUES = new Set(["0", "false", "off", "none", "disabled"]);
+const OFF_NOTICE = "<!-- store context OFF: PI_STORE_CONTEXT is set to a disabling value, so " +
+	"~/.agents/AGENTS.md, rules/, the output style and the memory index are NOT loaded this " +
+	"session. Unset PI_STORE_CONTEXT to restore them. -->";
+
+function storeContextDisabled(): boolean {
+	const value = process.env.PI_STORE_CONTEXT?.trim().toLowerCase();
+	return value !== undefined && value !== "" && OFF_VALUES.has(value);
+}
+
 function forHarness(text: string, harness = HARNESS): string {
 	const kept: string[] = [];
 	let skipping: string | null = null;
@@ -50,6 +64,7 @@ function forHarness(text: string, harness = HARNESS): string {
 }
 
 function storeContext(sessionId: string): string {
+	if (storeContextDisabled()) return OFF_NOTICE;
 	const rules = readdirSync(RULES_DIR)
 		.filter((name) => name.endsWith(".md"))
 		.sort()
@@ -67,6 +82,12 @@ let snapshot: string | undefined;
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
+		if (storeContextDisabled()) {
+			ctx.ui.notify(
+				"Store context is OFF (PI_STORE_CONTEXT): no rules, output style or memory index this session",
+				"warning",
+			);
+		}
 		snapshot = storeContext(ctx.sessionManager.getSessionId());
 	});
 	pi.on("before_agent_start", async (event, ctx) => {
