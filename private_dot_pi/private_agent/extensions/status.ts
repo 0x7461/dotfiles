@@ -7,7 +7,8 @@ import { join } from "node:path";
 // Fills the gaps between pi's built-in footer and CC's status line (pi's footer already
 // shows dir, branch, model, thinking level, context % and session cost):
 //   - uncommitted file count in the session cwd
-//   - the context token count from 100K up, since the footer shows only the percentage
+//   - the context token count plus its zone, since the footer shows only the percentage
+//   - average output speed (tok/s), which the footer omits
 //   - what the active paid provider has left, which CC showed as its 5h/7d limit meters.
 //     Two hosts are in play (ithaca PLAN, Decisions):
 //     * opencode-go — flat subscription with capped allowances. Go prices usage at the same
@@ -16,8 +17,17 @@ import { join } from "node:path";
 //       account-wide. Month spend is priced here from token counts, because pi records $0 for
 //       providers without `cost` in models.json, and one flat rate can't express peak hours.
 // Both spend figures cover this machine's pi sessions only.
+//
+// The one-line layout and the Plan/Code/Dump/ExDump/Dead zones follow statusline-pi
+// (luongnv89/pi-extensions), which joined its segments with a muted separator. Pi renders
+// every status key on one line joined by a space and sorted by key, so the segments live
+// under a single key here and are composed with a muted " · " to keep the grouping readable.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
+const STATUS_KEY = "vitals";
+const SEGMENT_ORDER = ["ctx", "tps", "git", "spend"] as const;
+const SPEED_THROTTLE_MS = 250;
+const CTX_SHOW_FROM = 100_000; // below this the footer's percentage is enough
 
 // OpenCode Go, V4.1 Flash allowance (checked 2026-09-28): $60/mo, 5h cap 20%, weekly 50%.
 // Unverified: rolling vs fixed windows, pooled vs per-model allowances.
@@ -38,6 +48,8 @@ const DEEPSEEK_PEAK: Record<string, { hit: number; miss: number; out: number }> 
 const DEEPSEEK_KEY = join(HOME, ".config", "deepseek", "key_void");
 const NAGGER_CONFIG = join(HOME, ".config", "guild", "nagger.json"); // spend_quota_usd (exit-map §6)
 const BALANCE_TTL_MS = 60_000;
+
+type Segment = (typeof SEGMENT_ORDER)[number];
 
 // Peak: 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday. Chinese public holidays are
 // off-peak but not modelled, so a holiday is priced as peak — an overestimate, never under.
@@ -87,14 +99,34 @@ function heat(ctx: ExtensionContext, pct: number, text: string): string {
 	return text;
 }
 
-// Context token count, same 100K / 200K tiers as CC's status line. Only shown from
-// 100K up; the footer's percentage is enough below that. "heavy" is the label that
-// carries the tier, so the colour is never the only signal.
-function contextStatus(ctx: ExtensionContext): string | undefined {
-	const tokens = ctx.getContextUsage()?.tokens;
-	if (tokens == null || tokens < 100_000) return undefined;
-	const text = `ctx ${Math.floor(tokens / 1000)}K${tokens >= 200_000 ? " heavy" : ""}`;
-	return ctx.ui.theme.fg(tokens >= 200_000 ? "error" : "warning", text);
+// statusline-pi's zones. A 1M-class window steps on absolute tokens; anything smaller
+// steps on the used ratio. Both DeepSeek models declare a 1M window (models.json), so the
+// old CC 100K/200K tiers — sized for a 200K window — no longer matched what pi runs.
+function contextZone(
+	usedTokens: number,
+	contextWindow: number,
+): "Plan" | "Code" | "Dump" | "ExDump" | "Dead" {
+	if (contextWindow >= 500_000) {
+		if (usedTokens < 150_000) return "Plan";
+		if (usedTokens < 250_000) return "Code";
+		if (usedTokens < 400_000) return "Dump";
+		if (usedTokens < 450_000) return "ExDump";
+		return "Dead";
+	}
+	const ratio = contextWindow > 0 ? usedTokens / contextWindow : 0;
+	if (ratio < 0.4) return "Plan";
+	if (ratio < 0.7) return "Code";
+	if (ratio < 0.75) return "Dump";
+	if (ratio < 0.8) return "ExDump";
+	return "Dead";
+}
+
+// Only the zones that call for action carry colour, so the zone word is the signal and the
+// colour never the only one (the same restraint the previous ctx readout used).
+function contextZoneColor(zone: string): "warning" | "error" | undefined {
+	if (zone === "Dead") return "error";
+	if (zone === "Dump" || zone === "ExDump") return "warning";
+	return undefined;
 }
 
 function goStatus(ctx: ExtensionContext): string {
@@ -165,29 +197,121 @@ async function deepseekStatus(ctx: ExtensionContext): Promise<string> {
 	return `deepseek ${await deepseekBalance()} · ${month}`;
 }
 
-async function refreshSpend(ctx: ExtensionContext) {
-	const provider = ctx.model?.provider;
-	if (provider === "opencode-go") ctx.ui.setStatus("spend", goStatus(ctx));
-	else if (provider === "deepseek") ctx.ui.setStatus("spend", await deepseekStatus(ctx));
-	else ctx.ui.setStatus("spend", undefined);
-}
-
-function refreshGit(ctx: ExtensionContext) {
-	execFile("git", ["-C", ctx.cwd, "status", "--porcelain"], { timeout: 2000 }, (err, stdout) => {
-		const count = err ? 0 : stdout.split("\n").filter(Boolean).length;
-		ctx.ui.setStatus("git", count ? `${count} uncommitted` : undefined);
-	});
-}
-
-async function refresh(ctx: ExtensionContext) {
-	if (!ctx.hasUI) return;
-	ctx.ui.setStatus("ctx", contextStatus(ctx));
-	refreshGit(ctx);
-	await refreshSpend(ctx);
-}
-
 export default function (pi: ExtensionAPI) {
+	const segments: Partial<Record<Segment, string>> = {};
+
+	let responseStartMs: number | undefined;
+	let liveOutputChars = 0;
+	let completedOutputTokens = 0;
+	let completedDurationMs = 0;
+	let lastSpeedRender = 0;
+
+	function render(ctx: ExtensionContext) {
+		if (!ctx.hasUI) return;
+		const sep = ctx.ui.theme.fg("dim", " · ");
+		const line = SEGMENT_ORDER.map((name) => segments[name])
+			.filter((value): value is string => Boolean(value))
+			.join(sep);
+		ctx.ui.setStatus(STATUS_KEY, line || undefined);
+	}
+
+	function refreshContext(ctx: ExtensionContext) {
+		const usage = ctx.getContextUsage();
+		if (!usage || usage.tokens == null || usage.tokens < CTX_SHOW_FROM) {
+			segments.ctx = undefined;
+			return;
+		}
+		const tokens = usage.tokens;
+		const zone = contextZone(tokens, usage.contextWindow);
+		const text = `ctx ${Math.floor(tokens / 1000)}K ${zone}`;
+		const color = contextZoneColor(zone);
+		segments.ctx = color ? ctx.ui.theme.fg(color, text) : text;
+	}
+
+	function refreshGit(ctx: ExtensionContext) {
+		execFile("git", ["-C", ctx.cwd, "status", "--porcelain"], { timeout: 2000 }, (err, stdout) => {
+			const count = err ? 0 : stdout.split("\n").filter(Boolean).length;
+			segments.git = count ? `${count} uncommitted` : undefined;
+			render(ctx);
+		});
+	}
+
+	async function refreshSpend(ctx: ExtensionContext) {
+		const provider = ctx.model?.provider;
+		if (provider === "opencode-go") segments.spend = goStatus(ctx);
+		else if (provider === "deepseek") segments.spend = await deepseekStatus(ctx);
+		else segments.spend = undefined;
+	}
+
+	// Average output speed over completed responses, plus the in-flight response once it
+	// has produced text. Estimated at four characters per token, as statusline-pi does.
+	function speedText(): string | undefined {
+		const streaming = responseStartMs !== undefined;
+		const tokens = completedOutputTokens + (streaming ? liveOutputChars / 4 : 0);
+		const ms = completedDurationMs + (streaming ? Date.now() - responseStartMs! : 0);
+		if (tokens <= 0 || ms <= 0) return undefined;
+		const tps = tokens / (ms / 1000);
+		return `${tps < 100 ? tps.toFixed(1) : Math.round(tps)} tps`;
+	}
+
+	function refreshSpeed(ctx: ExtensionContext, force = false) {
+		const now = Date.now();
+		if (!force && responseStartMs !== undefined && now - lastSpeedRender < SPEED_THROTTLE_MS) return;
+		lastSpeedRender = now;
+		segments.tps = speedText();
+		render(ctx);
+	}
+
+	function resetSpeed() {
+		responseStartMs = undefined;
+		liveOutputChars = 0;
+		completedOutputTokens = 0;
+		completedDurationMs = 0;
+		lastSpeedRender = 0;
+		segments.tps = undefined;
+	}
+
+	async function refresh(ctx: ExtensionContext) {
+		if (!ctx.hasUI) return;
+		refreshContext(ctx);
+		refreshGit(ctx);
+		await refreshSpend(ctx);
+		render(ctx);
+	}
+
 	pi.on("session_start", async (_event, ctx) => refresh(ctx));
-	pi.on("model_select", async (_event, ctx) => refresh(ctx));
+	pi.on("model_select", async (_event, ctx) => {
+		resetSpeed();
+		await refresh(ctx);
+	});
 	pi.on("agent_settled", async (_event, ctx) => refresh(ctx));
+
+	pi.on("message_start", (event, ctx) => {
+		if (event.message.role !== "assistant") return;
+		responseStartMs = Date.now();
+		liveOutputChars = 0;
+		refreshSpeed(ctx, true);
+	});
+
+	pi.on("message_update", (event, ctx) => {
+		if (event.message.role !== "assistant" || responseStartMs === undefined) return;
+		const chunk = event.assistantMessageEvent;
+		if (chunk.type === "text_delta" || chunk.type === "thinking_delta" || chunk.type === "toolcall_delta") {
+			liveOutputChars += chunk.delta.length;
+		}
+		refreshSpeed(ctx);
+	});
+
+	pi.on("message_end", (event, ctx) => {
+		if (event.message.role !== "assistant") return;
+		const outputTokens = event.message.usage?.output ?? 0;
+		const durationMs = responseStartMs === undefined ? 0 : Date.now() - responseStartMs;
+		if (responseStartMs !== undefined && outputTokens > 0 && durationMs > 0) {
+			completedOutputTokens += outputTokens;
+			completedDurationMs += durationMs;
+		}
+		responseStartMs = undefined;
+		liveOutputChars = 0;
+		refreshSpeed(ctx, true);
+	});
 }
