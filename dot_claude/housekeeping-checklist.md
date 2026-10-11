@@ -141,7 +141,9 @@ delete this section.
   ithaca's `git status`). The first confirmed save clears AGENTS.md "Untested: CC saving a
   memory through the symlinked folder".
 - [ ] **pi used this session?** Note anything pi missed that CC follows (a rule, the output
-  style, a memory). pi reads the store once per session, so edits apply next session.
+  style, a memory). pi reads the store once per session, so edits apply next session. ⚠ `private-guard`
+  reads the *command text*, so a command that names a secret file is blocked whole and the rest of that
+  call's output with it — put one in its own call, and don't describe a secret file in a commit message.
 - [ ] **After 2026-10-05:** `git -C ~/projects/ithaca log --oneline --grep 'Weekly snapshot' -1`
   shows a W41+ commit — the ithaca-snapshot service's commit path works inside ithaca. A log line
   `memory-snapshot: <week> — no changes` (`~/service/ithaca-snapshot/log/main/current`) means it ran
