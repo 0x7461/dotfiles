@@ -16,26 +16,37 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 // reach a private file indirectly.
 const HOME = homedir();
 
-// Providers the private tier accepts. `ollama` never leaves this machine. The other two are remote
-// and accepted on their stated terms, checked against the providers' own pages 2026-10-11 (recorded
-// in `agent_docs/pi-setup.md` § "The private tier's terms"): Anthropic does not train on consumer
-// prompts unless the account's "improve Claude" setting is on, and retains 30 days with it off (the
-// commercial API never trains, and offers ZDR to eligible accounts); OpenAI's personal ChatGPT/Codex
-// trains only while "Improve the model for everyone" is on, with Codex's own "Include environments"
-// switch on top. Both are conditional on account settings this file cannot read, so keeping them off
-// is the account owner's job. Deliberately absent: Gemini (72-hour retention and human review for
-// safety, and Google suspends AI Pro accounts that drive third-party tools) and every free preview
-// tier, which can be a short-lived feedback program. A provider id that does not match pi's own key
-// simply stays non-private — the guard fails closed.
-const PRIVATE_PROVIDERS = new Set(["ollama", "anthropic", "openai"]);
+// The private tier as a policy with reasons, not a bare set: the definition and the enforcement
+// should be one object, or they drift apart (they did — see `agent_docs/pi-setup.md` § "Private
+// tier — the definition", which is the canonical prose).
+//
+//   `on-machine`  nothing leaves this machine. Unconditional.
+//   `no-training` remote, accepted on its stated terms: no training on prompts and no routine human
+//                 review. Both are conditional — on a setting the account owner keeps off
+//                 (Anthropic's "improve Claude", OpenAI's "Improve the model for everyone" plus
+//                 Codex's "Include environments"), or on a contract renewed monthly (OpenCode Go's
+//                 zero-retention agreement lapses on its own, so recheck the page and drop the ids
+//                 if it lapses).
+//
+// Anything absent is not private: the guard fails closed, and `notPrivateReason` says why when the
+// provider's reason is known.
+const PRIVATE_PROVIDERS: Record<string, "on-machine" | "no-training"> = {
+	ollama: "on-machine",
+	anthropic: "no-training",
+	openai: "no-training",
+	"opencode-go": "no-training",
+};
 
-// Remote models whose stated terms are no training and 0-day retention, by provider. OpenCode Go per
-// https://opencode.ai/docs/go/, checked 2026-10-09; inert until Go is subscribed. Left out: 30-day
-// retention (Grok, GPT Luna), training on prompts (Muse Spark Contributor), and the free previews,
-// which can be short-lived feedback programs. DeepSeek's zero-retention agreement with Go is renewed
-// monthly (valid through 2026-10-31 when checked): recheck the page each month, drop the deepseek
-// ids if it lapses.
-const PRIVATE_MODELS: Record<string, Set<string>> = {
+// Providers known to sit outside the tier, with the reason, so a block explains itself instead of
+// saying only what the model is not. Their own pages, checked 2026-10-11.
+const NOT_PRIVATE: Record<string, string> = {
+	deepseek: "its terms state training on prompts as a purpose",
+	google: "human review for safety, and it suspends AI Pro accounts that drive third-party tools",
+};
+
+// Providers whose allowance is per model id rather than per account. Absent = the whole provider is
+// covered once it is in PRIVATE_PROVIDERS.
+const PRIVATE_IDS: Record<string, Set<string>> = {
 	"opencode-go": new Set([
 		"deepseek-v4-flash",
 		"deepseek-v4-pro",
@@ -61,8 +72,17 @@ const PRIVATE_MODELS: Record<string, Set<string>> = {
 
 export function isPrivateModel(provider: string | undefined, id: string | undefined): boolean {
 	if (provider === undefined) return false;
-	if (PRIVATE_PROVIDERS.has(provider)) return true;
-	return id !== undefined && (PRIVATE_MODELS[provider]?.has(id) ?? false);
+	if (PRIVATE_PROVIDERS[provider] === undefined) return false;
+	const ids = PRIVATE_IDS[provider];
+	return ids === undefined || (id !== undefined && ids.has(id));
+}
+
+// Why this session is not private, for the block message: a rule that cannot say which one applied
+// gets edited by guesswork. Absent from NOT_PRIVATE means the provider is simply outside the policy
+// — the fail-closed case, not a judgement about its terms.
+export function notPrivateReason(provider: string | undefined): string {
+	if (provider === undefined) return "no model is set";
+	return NOT_PRIVATE[provider] ?? `${provider} is outside the private tier`;
 }
 
 // chezmoi.toml's [data] holds secrets, and these subcommands render them — or the target state that
@@ -810,8 +830,8 @@ export default function (pi: ExtensionAPI) {
 			block: true,
 			reason:
 				`private-guard: ${shown} is private and the model (${provider ?? "none"}/${ctx.model?.id ?? "none"}) ` +
-				"is not. Do not retry another way. Ask the user to switch to a private model (local ollama, or " +
-				"an allowlisted OpenCode Go model) or to run it themselves.",
+				`is not — ${notPrivateReason(provider)}. Do not retry another way. Ask the user to switch to a ` +
+				"private model (local ollama, or a no-training provider the guard accepts) or to run it themselves.",
 		};
 	});
 }
