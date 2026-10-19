@@ -22,9 +22,9 @@ import { join } from "node:path";
 // actionable) and pi's session cost — the spend segment below prices the paid host itself.
 //
 // The spend segment covers the one paid host (ithaca PLAN, Decisions): opencode-go — a flat
-// subscription with per-model capped allowances. Go prices usage at the same per-token rates
-// pi records in `usage.cost`, so summing those approximates Go's meter against the active
-// model's monthly allowance. The direct lane is closed (account deleted, 2026-10-19).
+// subscription with per-model capped allowances. Usage is priced from tokens at Go's
+// peak/off-peak rates (pi's `usage.cost` is flat off-peak, which under-counts peak 2×), then
+// compared to the active model's monthly allowance. The direct lane is closed (2026-10-19).
 // The figure covers this machine's pi sessions only.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
@@ -32,8 +32,6 @@ const SPEED_THROTTLE_MS = 250;
 
 // OpenCode Go per-model monthly allowances, $/mo (opencode.ai/docs/go, 2026-10-19). Each
 // model is metered independently; the 5h window is 20% of the monthly limit, the weekly 50%.
-// Go prices peak/off-peak separately but pi records `usage.cost` flat, so this sums pi's
-// meter and compares it to the allowance — an approximation, not Go's ground truth.
 const GO_MONTHLY_USD: Record<string, number> = {
 	"deepseek-v4-pro": 15,
 	"deepseek-v4.1-flash": 80,
@@ -41,6 +39,32 @@ const GO_MONTHLY_USD: Record<string, number> = {
 };
 // Unknown model: assume the smallest common allowance so the meter errs toward warn.
 const GO_MONTHLY_USD_DEFAULT = 15;
+
+// Go per-model rates, $/1M tokens (opencode.ai/docs/go, 2026-10-19). Peak is Mon–Fri
+// 01:00–04:00 & 06:00–10:00 UTC (2× off-peak). Cache write is unpriced, so a cache miss
+// bills as plain input.
+type GoRates = { peak: { hit: number; miss: number; out: number }; off: { hit: number; miss: number; out: number } };
+const GO_RATES: Record<string, GoRates> = {
+	"deepseek-v4-pro": {
+		peak: { hit: 0.044, miss: 1.32, out: 3.96 },
+		off: { hit: 0.022, miss: 0.66, out: 1.98 },
+	},
+	"deepseek-v4.1-flash": {
+		peak: { hit: 0.006, miss: 0.3, out: 1.2 },
+		off: { hit: 0.003, miss: 0.15, out: 0.6 },
+	},
+	"deepseek-v4-flash": {
+		peak: { hit: 0.006, miss: 0.3, out: 1.2 },
+		off: { hit: 0.003, miss: 0.15, out: 0.6 },
+	},
+};
+
+function goIsPeak(ms: number): boolean {
+	const d = new Date(ms);
+	const day = d.getUTCDay();
+	const hour = d.getUTCHours();
+	return day >= 1 && day <= 5 && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10));
+}
 
 type Assistant = { ms: number; provider: string; model: string; usage: any };
 
@@ -110,15 +134,25 @@ function contextZoneColor(zone: string): "warning" | "error" | undefined {
 	return undefined;
 }
 
+// Price one assistant message at the model's peak or off-peak rate. Unknown models fall
+// back to pi's flat `usage.cost` (off-peak), so the meter never reads $0 for them.
+function priceMessage(m: Assistant, rates: GoRates | undefined): number {
+	if (!rates) return m.usage.cost?.total ?? 0;
+	const u = m.usage;
+	const r = goIsPeak(m.ms) ? rates.peak : rates.off;
+	return ((u.cacheRead ?? 0) * r.hit + ((u.input ?? 0) + (u.cacheWrite ?? 0)) * r.miss + (u.output ?? 0) * r.out) / 1e6;
+}
+
 function goStatus(ctx: ExtensionContext): string {
 	const model = ctx.model?.id?.replace(/^models\//, "");
 	const capUsd = model ? (GO_MONTHLY_USD[model] ?? GO_MONTHLY_USD_DEFAULT) : GO_MONTHLY_USD_DEFAULT;
+	const rates = model ? GO_RATES[model] : undefined;
 	const now = Date.now();
 	// Go meters each model's allowance independently, so sum only the active model's usage.
 	const spend = (since: number) =>
 		assistantMessagesSince(since, "opencode-go")
 			.filter((m) => m.model === model)
-			.reduce((usd, m) => usd + (m.usage.cost?.total ?? 0), 0);
+			.reduce((usd, m) => usd + priceMessage(m, rates), 0);
 	const meter = (label: string, usd: number, cap: number) => {
 		const pct = Math.round((usd / cap) * 100);
 		return heat(ctx, pct, `${label} ${pct}%`);
