@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -13,52 +13,34 @@ import { join } from "node:path";
 // ExDump/Dead zone read off the context window.
 //
 // Segments, left to right:
-//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ <spend> │ model • thinking
+//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ <spend>   …   model • thinking
+//
+// The model is right-aligned to the terminal edge, as the built-in footer did.
 //
 // It carries over the built-in footer's cwd, branch, context %, cache-hit, model and
 // thinking level. It drops the ↑input ↓output RcacheRead WcacheWrite totals (rarely
-// actionable) and pi's session cost, which is $0 for the DeepSeek provider (no `cost` in
-// models.json) — the spend segment below already prices the paid hosts.
+// actionable) and pi's session cost — the spend segment below prices the paid host itself.
 //
-// The spend segment covers the two paid hosts (ithaca PLAN, Decisions):
-//   * opencode-go — flat subscription with capped allowances. Go prices usage at the same
-//     per-token rates pi records in `usage.cost`, so summing those approximates Go's meter.
-//   * deepseek (direct, prepaid) — the balance from DeepSeek's API is the ground truth and
-//     account-wide. Month spend is priced here from token counts, because pi records $0 for
-//     providers without `cost` in models.json, and one flat rate can't express peak hours.
-// Both spend figures cover this machine's pi sessions only.
+// The spend segment covers the one paid host (ithaca PLAN, Decisions): opencode-go — a flat
+// subscription with per-model capped allowances. Go prices usage at the same per-token rates
+// pi records in `usage.cost`, so summing those approximates Go's meter against the active
+// model's monthly allowance. The direct lane is closed (account deleted, 2026-10-19).
+// The figure covers this machine's pi sessions only.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 const SPEED_THROTTLE_MS = 250;
 
-// OpenCode Go, V4.1 Flash allowance (checked 2026-09-28): $60/mo, 5h cap 20%, weekly 50%.
-// Unverified: rolling vs fixed windows, pooled vs per-model allowances.
-const GO_MONTHLY_USD = 60;
-const GO_WINDOWS = [
-	{ label: "5h", ms: 5 * 3600_000, capUsd: GO_MONTHLY_USD * 0.2 },
-	{ label: "7d", ms: 7 * 86400_000, capUsd: GO_MONTHLY_USD * 0.5 },
-];
-
-// DeepSeek peak rates, $/1M tokens (api-docs.deepseek.com/quick_start/pricing, 2026-09-29).
-// Off-peak is half. `deepseek-v4-flash` is a legacy name billed as `deepseek-flash`.
-// No cache-write price: a cache miss is plain input.
-const DEEPSEEK_PEAK: Record<string, { hit: number; miss: number; out: number }> = {
-	"deepseek-flash": { hit: 0.006, miss: 0.3, out: 1.2 },
-	"deepseek-v4-flash": { hit: 0.006, miss: 0.3, out: 1.2 },
-	"deepseek-v4-pro": { hit: 0.044, miss: 1.32, out: 3.96 },
+// OpenCode Go per-model monthly allowances, $/mo (opencode.ai/docs/go, 2026-10-19). Each
+// model is metered independently; the 5h window is 20% of the monthly limit, the weekly 50%.
+// Go prices peak/off-peak separately but pi records `usage.cost` flat, so this sums pi's
+// meter and compares it to the allowance — an approximation, not Go's ground truth.
+const GO_MONTHLY_USD: Record<string, number> = {
+	"deepseek-v4-pro": 15,
+	"deepseek-v4.1-flash": 80,
+	"deepseek-v4-flash": 80, // legacy id; billed as v4.1
 };
-const DEEPSEEK_KEY = join(HOME, ".config", "deepseek", "key_void");
-const NAGGER_CONFIG = join(HOME, ".config", "guild", "nagger.json"); // spend_quota_usd (exit-map §6)
-const BALANCE_TTL_MS = 60_000;
-
-// Peak: 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday. Chinese public holidays are
-// off-peak but not modelled, so a holiday is priced as peak — an overestimate, never under.
-function deepseekIsPeak(ms: number): boolean {
-	const d = new Date(ms);
-	const day = d.getUTCDay();
-	const hour = d.getUTCHours();
-	return day >= 1 && day <= 5 && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10));
-}
+// Unknown model: assume the smallest common allowance so the meter errs toward warn.
+const GO_MONTHLY_USD_DEFAULT = 15;
 
 type Assistant = { ms: number; provider: string; model: string; usage: any };
 
@@ -100,7 +82,7 @@ function heat(ctx: ExtensionContext, pct: number, text: string): string {
 }
 
 // statusline-pi's zones. A 1M-class window steps on absolute tokens; anything smaller
-// steps on the used ratio. Both DeepSeek models declare a 1M window (models.json).
+// steps on the used ratio. Both DeepSeek models declare a 1M window.
 function contextZone(
 	usedTokens: number,
 	contextWindow: number,
@@ -129,71 +111,24 @@ function contextZoneColor(zone: string): "warning" | "error" | undefined {
 }
 
 function goStatus(ctx: ExtensionContext): string {
+	const model = ctx.model?.id?.replace(/^models\//, "");
+	const capUsd = model ? (GO_MONTHLY_USD[model] ?? GO_MONTHLY_USD_DEFAULT) : GO_MONTHLY_USD_DEFAULT;
 	const now = Date.now();
+	// Go meters each model's allowance independently, so sum only the active model's usage.
 	const spend = (since: number) =>
-		assistantMessagesSince(since, "opencode-go").reduce((usd, m) => usd + (m.usage.cost?.total ?? 0), 0);
-	const meter = (label: string, usd: number, capUsd: number) => {
-		const pct = Math.round((usd / capUsd) * 100);
+		assistantMessagesSince(since, "opencode-go")
+			.filter((m) => m.model === model)
+			.reduce((usd, m) => usd + (m.usage.cost?.total ?? 0), 0);
+	const meter = (label: string, usd: number, cap: number) => {
+		const pct = Math.round((usd / cap) * 100);
 		return heat(ctx, pct, `${label} ${pct}%`);
 	};
 	const meters = [
-		...GO_WINDOWS.map((w) => meter(w.label, spend(now - w.ms), w.capUsd)),
-		meter("month", spend(monthStart(now)), GO_MONTHLY_USD),
+		meter("5h", spend(now - 5 * 3600_000), capUsd * 0.2),
+		meter("7d", spend(now - 7 * 86400_000), capUsd * 0.5),
+		meter("month", spend(monthStart(now)), capUsd),
 	];
 	return `go ${meters.join(" · ")}`;
-}
-
-let balance: { text: string; at: number } | undefined;
-
-async function deepseekBalance(): Promise<string> {
-	if (balance && Date.now() - balance.at < BALANCE_TTL_MS) return balance.text;
-	let text: string;
-	try {
-		const key = readFileSync(DEEPSEEK_KEY, "utf8").trim();
-		const res = await fetch("https://api.deepseek.com/user/balance", {
-			headers: { Authorization: `Bearer ${key}` },
-			signal: AbortSignal.timeout(5000),
-		});
-		const info = (await res.json()).balance_infos?.find((b: any) => b.currency === "USD");
-		text = info ? `$${Number(info.total_balance).toFixed(2)} left` : `balance ? (HTTP ${res.status})`;
-	} catch (err) {
-		text = `balance ? (${(err as any).code ?? (err as Error).name})`;
-	}
-	balance = { text, at: Date.now() };
-	return text;
-}
-
-function deepseekMonthSpend(now: number): { usd: number; unpriced: boolean } {
-	let usd = 0;
-	let unpriced = false;
-	for (const m of assistantMessagesSince(monthStart(now), "deepseek")) {
-		const peak = DEEPSEEK_PEAK[m.model];
-		if (!peak) {
-			unpriced = true;
-			continue;
-		}
-		const factor = deepseekIsPeak(m.ms) ? 1 : 0.5;
-		const u = m.usage;
-		usd += (factor * ((u.cacheRead ?? 0) * peak.hit + ((u.input ?? 0) + (u.cacheWrite ?? 0)) * peak.miss + (u.output ?? 0) * peak.out)) / 1e6;
-	}
-	return { usd, unpriced };
-}
-
-function spendQuota(): number | undefined {
-	if (!existsSync(NAGGER_CONFIG)) return undefined;
-	const quota = JSON.parse(readFileSync(NAGGER_CONFIG, "utf8")).spend_quota_usd;
-	return typeof quota === "number" && quota > 0 ? quota : undefined;
-}
-
-async function deepseekStatus(ctx: ExtensionContext): Promise<string> {
-	const { usd, unpriced } = deepseekMonthSpend(Date.now());
-	let month = `month $${usd.toFixed(2)}${unpriced ? "+?" : ""}`;
-	const quota = spendQuota();
-	if (quota) {
-		const pct = Math.round((usd / quota) * 100);
-		month = heat(ctx, pct, `${month}/$${quota} (${pct}%)`);
-	}
-	return `deepseek ${await deepseekBalance()} · ${month}`;
 }
 
 interface FooterState {
@@ -213,6 +148,13 @@ interface FooterState {
 function shortenHome(path: string): string {
 	const home = process.env.HOME;
 	return home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+}
+
+// Pad `left` so `right` sits flush against the terminal's right edge, as the built-in
+// footer right-aligned the model. Returns undefined when the two would collide.
+function rightAlign(left: string, right: string, width: number): string | undefined {
+	const gap = width - visibleWidth(left) - visibleWidth(right);
+	return gap >= 2 ? left + " ".repeat(gap) + right : undefined;
 }
 
 function formatHead(theme: any, state: FooterState, branch: string | undefined): string | undefined {
@@ -247,11 +189,16 @@ export default function (pi: ExtensionAPI) {
 		const sep = theme.fg("borderMuted", " │ ");
 		const head = formatHead(theme, state, branch);
 		const model = formatModel(theme, state, footerData);
-		const wide = [head, state.ctx, state.tps, state.cache, state.spend, model].filter(Boolean).join(sep);
-		if (visibleWidth(wide) <= width) return [wide];
-		// Narrow terminal: two lines, the session-hygiene half then the spend half.
+		const left = [head, state.ctx, state.tps, state.cache, state.spend].filter(Boolean).join(sep);
+
+		const oneLine = model ? rightAlign(left, model, width) : visibleWidth(left) <= width ? left : undefined;
+		if (oneLine) return [oneLine];
+
+		// Narrow terminal: two lines, the session-hygiene half then the spend half, model
+		// still pushed right.
 		const line1 = [head, state.ctx, state.tps].filter(Boolean).join(sep);
-		const line2 = [state.cache, state.spend, model].filter(Boolean).join(sep);
+		const line2Left = [state.cache, state.spend].filter(Boolean).join(sep);
+		const line2 = (model && rightAlign(line2Left, model, width)) || `${line2Left}${sep}${model ?? ""}`;
 		return [
 			truncateToWidth(line1, width, theme.fg("dim", "...")),
 			truncateToWidth(line2, width, theme.fg("dim", "...")),
@@ -304,16 +251,13 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	async function refreshSpend(ctx: ExtensionContext) {
-		const provider = ctx.model?.provider;
-		if (provider === "opencode-go") state.spend = goStatus(ctx);
-		else if (provider === "deepseek") state.spend = await deepseekStatus(ctx);
-		else state.spend = undefined;
+	function refreshSpend(ctx: ExtensionContext) {
+		state.spend = ctx.model?.provider === "opencode-go" ? goStatus(ctx) : undefined;
 		requestRender?.();
 	}
 
-	// Cache-hit rate of the latest assistant response. DeepSeek prices a cache hit at 50x
-	// less than a miss (see DEEPSEEK_PEAK), so this is the main lever on cost.
+	// Cache-hit rate of the latest assistant response. Go prices a cache hit at a small
+	// fraction of a miss (Flash ~50x, Pro ~30x), so this is the main lever on cost.
 	function cacheHitText(usage: any): string | undefined {
 		const prompt = (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);
 		return prompt > 0 ? `CH ${(((usage.cacheRead ?? 0) / prompt) * 100).toFixed(1)}%` : undefined;
