@@ -70,5 +70,16 @@ Host nas nas-lan nas-link-local
     ServerAliveInterval 15
     ServerAliveCountMax 3
 
+# Tailnet peers by name. MagicDNS is off tailnet-wide, so hostnames do not resolve on their own --
+# these are explicit IPs, same as nas. Both machines were hostnamed `void`, which is why the tailnet
+# used to list void/void-1; the nodes were renamed to x1c/xps on 2026-10-22 (IPs unchanged).
+Host x1c
+    HostName 100.120.178.108
+    User ta
+
+Host xps
+    HostName 100.70.255.65
+    User ta
+
 Host *
     AddKeysToAgent yes
