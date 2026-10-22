@@ -81,9 +81,9 @@
     "curate": {
       "enabled": true,
       "target": 8,
-      "backend": "ollama",
-      "model": "gemma4:e4b",
-      "timeout_seconds": 600
+      "backend": "openai",
+      "model": "deepseek-v4.1-flash",
+      "timeout_seconds": 120
     },
     "summarize": {
       "enabled": true,
