@@ -13,7 +13,7 @@ import { join } from "node:path";
 // ExDump/Dead zone read off the context window.
 //
 // Segments, left to right:
-//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ <spend>   …   model • thinking
+//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ <spend>   …   model • thinking | ⚡87% | 14:32
 //
 // The model is right-aligned to the terminal edge, as the built-in footer did.
 //
@@ -177,6 +177,8 @@ interface FooterState {
 	model?: string;
 	thinking?: string;
 	reasoning: boolean;
+	battery?: string;
+	clock?: string;
 }
 
 function shortenHome(path: string): string {
@@ -203,7 +205,31 @@ function formatModel(theme: any, state: FooterState, footerData: any): string | 
 	if (!state.model) return undefined;
 	let text = state.reasoning && state.thinking ? `${state.model} • ${state.thinking}` : state.model;
 	if (state.provider && (footerData?.getAvailableProviderCount?.() ?? 1) > 1) text = `(${state.provider}) ${text}`;
-	return theme.fg("muted", text);
+	const sep = theme.fg("borderMuted", " | ");
+	const tail = [state.battery, state.clock].filter(Boolean).join(sep);
+	return theme.fg("muted", text) + (tail ? sep + tail : "");
+}
+
+// Battery from sysfs, not upower: no daemon to depend on, and it works in a bare session.
+// Charging/full get a distinct glyph; a low charge on battery turns the segment amber, then red.
+const BAT_DIR = "/sys/class/power_supply/BAT0";
+
+function batteryText(theme: any): string | undefined {
+	try {
+		const cap = parseInt(readFileSync(join(BAT_DIR, "capacity"), "utf8").trim(), 10);
+		if (!Number.isFinite(cap)) return undefined;
+		const status = readFileSync(join(BAT_DIR, "status"), "utf8").trim();
+		const icon = status === "Charging" ? "⚡" : status === "Full" ? "⛁" : "▮";
+		const color = status === "Discharging" && cap <= 15 ? "error" : status === "Discharging" && cap <= 30 ? "warning" : "muted";
+		return theme.fg(color, `${icon}${cap}%`);
+	} catch {
+		return undefined;
+	}
+}
+
+function clockText(theme: any): string | undefined {
+	const d = new Date();
+	return theme.fg("muted", `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
 }
 
 export default function (pi: ExtensionAPI) {
@@ -247,9 +273,19 @@ export default function (pi: ExtensionAPI) {
 				updateGit(ctx);
 				tui.requestRender();
 			});
+			// Battery and clock are the only segments that drift on their own, so they are polled:
+			// every 30s keeps the clock honest without a render loop.
+			state.battery = batteryText(theme);
+			state.clock = clockText(theme);
+			const envTimer = setInterval(() => {
+				state.battery = batteryText(theme);
+				state.clock = clockText(theme);
+				tui.requestRender();
+			}, 30_000);
 			return {
 				dispose() {
 					unsubscribe?.();
+					clearInterval(envTimer);
 					requestRender = undefined;
 				},
 				invalidate() {
