@@ -219,9 +219,11 @@ function batteryText(theme: any): string | undefined {
 		const cap = parseInt(readFileSync(join(BAT_DIR, "capacity"), "utf8").trim(), 10);
 		if (!Number.isFinite(cap)) return undefined;
 		const status = readFileSync(join(BAT_DIR, "status"), "utf8").trim();
-		const icon = status === "Charging" ? "⚡" : status === "Full" ? "⛁" : "▮";
+		// Icon only while charging: a glyph next to a plain percentage reads as a stray block in the
+		// footer (seen 2026-10-23), and on battery the number plus colour is already unambiguous.
+		const icon = status === "Charging" ? "⚡" : "";
 		const color = status === "Discharging" && cap <= 15 ? "error" : status === "Discharging" && cap <= 30 ? "warning" : "muted";
-		return theme.fg(color, `${icon}${cap}%`);
+		return theme.fg(color, icon ? `${icon}${cap}%` : `${cap}%`);
 	} catch {
 		return undefined;
 	}
