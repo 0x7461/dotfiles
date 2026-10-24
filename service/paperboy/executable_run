@@ -2,10 +2,6 @@
 exec 2>&1
 /home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 cd /home/ta/projects/guild
-# Go's resolver tries every nameserver in resolv.conf and treats an ICMP
-# 'unreachable' as fatal, so the IPv6 MagicDNS entry (fd7a:...) kills a lookup
-# whenever mobile data has no IPv6 route. cgo defers to glibc, which falls through.
-export GODEBUG=netdns=cgo
 
 # Fires daily at 18:00, but only Mon + Fri actually send.
 #
