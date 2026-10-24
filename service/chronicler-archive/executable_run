@@ -1,5 +1,6 @@
 #!/bin/sh
 exec 2>&1
+/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/chronicler
 # -t + -s 1d: a 03:30 slot missed while the laptop was off fires on next start

@@ -1,4 +1,5 @@
 #!/bin/sh
+/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 # runit run-script for periodic Gmail sync (#46 Phase 1).
 # Live under ~/service/mbsync since Phase 1 went live; this is the canonical copy.
 #

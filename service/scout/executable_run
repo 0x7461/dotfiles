@@ -1,8 +1,13 @@
 #!/bin/sh
 exec 2>&1
+/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 # summarize (npm, `#!/usr/bin/env node`) needs mise's node; ~/.local/bin holds summarize + claude
 export PATH="/home/ta/.local/share/mise/shims:/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/guild
+# Go's resolver tries every nameserver in resolv.conf and treats an ICMP
+# 'unreachable' as fatal, so the IPv6 MagicDNS entry (fd7a:...) kills a lookup
+# whenever mobile data has no IPv6 route. cgo defers to glibc, which falls through.
+export GODEBUG=netdns=cgo
 
 # Wait until Saturday at 09:00
 # -w6 = Saturday (0=Sunday, 6=Saturday)

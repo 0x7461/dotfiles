@@ -382,7 +382,7 @@ require('lazy').setup({
   {
     'nvim-lualine/lualine.nvim',
     dependencies = { 'nvim-tree/nvim-web-devicons' },
-    opts = { options = { theme = 'catppuccin' } },
+    opts = { options = { theme = 'catppuccin-macchiato' } },
   },
 
   -- Tmux integration — Ctrl+hjkl across vim splits and tmux panes

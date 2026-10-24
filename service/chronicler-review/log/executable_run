@@ -1,2 +1,3 @@
 #!/bin/sh
+mkdir -p /home/ta/service/chronicler-review/log/main
 exec svlogd -tt /home/ta/service/chronicler-review/log/main

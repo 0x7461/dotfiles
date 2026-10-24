@@ -87,9 +87,9 @@
     },
     "summarize": {
       "enabled": true,
-      "model": "gemma4:e4b",
+      "model": "deepseek-v4.1-flash",
       "timeout_seconds": 600,
-      "backend": "ollama"
+      "backend": "openai"
     }
   }
 }

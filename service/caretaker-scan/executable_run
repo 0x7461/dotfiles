@@ -1,4 +1,5 @@
 #!/bin/sh
+/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/caretaker
 exec snooze -w 6 -H 9 -M 0 uv run python -m caretaker scan 2>&1

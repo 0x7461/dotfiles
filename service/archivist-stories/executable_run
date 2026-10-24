@@ -1,5 +1,6 @@
 #!/bin/sh
 exec 2>&1
+/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 export HOME=/home/ta
 cd /home/ta/projects/archivist
 

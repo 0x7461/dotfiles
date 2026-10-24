@@ -1,4 +1,5 @@
 #!/bin/sh
+/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/caretaker
 # -t + -s 1d: a 04:00 slot missed while the laptop was off fires on next start

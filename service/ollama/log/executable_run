@@ -1,2 +1,3 @@
 #!/bin/sh
+mkdir -p /home/ta/logs/ollama
 exec svlogd -tt /home/ta/logs/ollama

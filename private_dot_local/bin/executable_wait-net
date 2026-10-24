@@ -1,0 +1,32 @@
+#!/bin/sh
+# wait-net [SECONDS] — block until a name resolves, so a job that fires on boot
+# doesn't run blind.
+#
+# runsvdir starts every service at once, and snooze's catch-up windows fire
+# immediately on boot. On 2026-10-24 (boot 01:59:34Z) the 09:00-local batch ran
+# 26 seconds later with no route: nagger and caretaker-scan both died on
+# "network is unreachable" against Tailscale's resolver, and scout skipped every
+# source yet still exited 0. A weekly job that loses this race loses its week.
+#
+# Exits 1 if the network never comes up, so the caller's `finish` hook records a
+# transient failure (exit 1 = retry next window) instead of a phantom success.
+# The cap matters: blocking forever would hold the snooze window open.
+#
+# Keep this dependency-free — it runs before anything else in a run script, so it
+# cannot rely on PATH entries those scripts add later.
+
+limit=${1:-120}
+waited=0
+while [ "$waited" -lt "$limit" ]; do
+	# `getent hosts` is the same resolver the jobs use; when the network is down
+	# this fails with the resolver's own address unreachable, which is exactly
+	# the failure this needs to catch.
+	if getent hosts github.com >/dev/null 2>&1; then
+		exit 0
+	fi
+	sleep 2
+	waited=$((waited + 2))
+done
+
+echo "wait-net: network still down after ${limit}s; skipping this run" >&2
+exit 1
