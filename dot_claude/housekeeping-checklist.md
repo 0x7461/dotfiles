@@ -4,6 +4,7 @@ Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
 **Last reviewed:** 2026-10-10 (pi-cutover pass: a `find` over `~/.claude` is now blocked by `private-guard`, so the CC-side symlinks are checked by name instead)
+**Last CC cleanup:** 2026-10-25 (caretaker #18: store-check 138 files / 0 problems, always-loaded 39,774 chars, memcheck 94 / 0 problems, harness settings have no CC counterpart to review on this machine)
 **Last store cleanup:** 2026-10-10 (memcheck clean at 90; AGENTS.md 78/200 lines; MEMORY.md 105 lines / 9,629 bytes; settings review pending — that half was CC's)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[caretaker]] (`~/projects/caretaker/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
