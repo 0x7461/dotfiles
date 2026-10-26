@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -22,21 +22,27 @@ import { join } from "node:path";
 // actionable) and pi's session cost — the spend segment below prices the paid host itself.
 //
 // The spend segment covers the one paid host (ithaca PLAN, Decisions): opencode-go — a flat
-// subscription with one shared usage quota, not a set of independent per-model buckets. The
-// per-model dollar figures Go publishes are *rates*: a dollar spent on a $15 model consumes
-// four times the quota a dollar on a $60 model does, and the plan meter is the sum of those
-// fractions (Go reports it per request as `opencode.allowance`; pi drops that field, so it is
-// recomputed from tokens here). The 5-hour window allows 20% of the monthly quota, the week
-// 50%. The week and the billing cycle are fixed buckets — anchored to the console's own reset
-// instants below — while the 5-hour one is treated as rolling. The segment reports what is
-// **left**, not what is spent: the number you act on is headroom, and colour still follows
-// consumption, so a comfortable remainder never reads green while it is actually running out. The direct lane is closed
-// (2026-10-19). The figure covers this machine's pi sessions only, so it reads a little under
-// the console (unlogged retries and aborted streams are billed upstream), and Go can bill
-// extra usage to the Console balance past 100% — the meter keeps climbing rather than
-// stopping there.
+// subscription with one shared usage quota. The plan's monthly limit is $60, and each model's
+// published dollar figure is a *rate* against it: one dollar of list price on a $15 model
+// consumes $4 of the quota, one on an $80 model consumes $0.75. Go reports the exact charge
+// per request as `usage.opencode.allowance` (with `billing_source` and `cost`), but pi
+// normalizes the response and drops the vendor block, so it never reaches the session file.
+// `provider_stream_event` still sees the raw chunk, so those fields are captured into the
+// ledger below; anything older, or from another pi that predates the ledger, is backfilled
+// from tokens at the published rates. The 5-hour window allows 20% of the monthly quota, the
+// week 50%. The week and the billing cycle are fixed buckets — anchored to the console's own
+// reset instants below — while the 5-hour one is treated as rolling. The segment reports what
+// is **left**, not what is spent: the number you act on is headroom, and colour still follows
+// consumption, so a comfortable remainder never reads green while it is actually running out.
+// Past the quota Go bills the Console balance; `credit $X` is what that has cost this cycle
+// (`billing_source: "balance"`). The balance itself is never reported by the API.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
+// One JSON line per Go request, written from `provider_stream_event`: the only place the vendor
+// usage block survives. Appended by every pi that loads this extension, including pi-worker.
+const GO_LEDGER = join(HOME, ".local", "state", "pi", "go-usage.jsonl");
+// The plan's monthly limit in dollars: `allowance` is expressed in these units.
+const GO_PLAN_MONTHLY_USD = 60;
 // pi-worker (the pi-worker skill) runs its pi child with `--session-dir <run>/sessions`, so
 // delegated work never lands under SESSIONS_DIR. It defaults to a cheap model but escalates to
 // DeepSeek Pro, so leaving it out under-counts exactly the expensive turns.
@@ -158,6 +164,11 @@ const GO_MONTHLY_USD_DEFAULT = 15;
 // Mondays 07:00, cycle renews on the 19th around 22:30, Asia/Ho_Chi_Minh — and are advanced
 // here rather than stored per session. Re-seed when the plan or billing anchor changes; a
 // stale seed shows plausible percentages with no way to notice.
+// The rate table below is backfill only: requests captured in the ledger carry Go's own
+// `allowance`, and a request without one is priced from `list_cost = tokens × rate`, then
+// charged `list_cost × 60 / bucket`. Rates are $/1M tokens; `write` is a priced cache write
+// (Kimi, Qwen, GPT Luna), otherwise an unwritten cache bills as plain input; `tiers` are
+// context-length bands, shortest first. DeepSeek is the only peak-priced family.
 const GO_WEEK_RESET_SEED = "2026-11-02T07:00:00+07:00";
 const GO_CYCLE_RESET_SEED = "2026-11-19T22:30:00+07:00";
 const WEEK_MS = 7 * 86400_000;
@@ -310,6 +321,49 @@ function goConsumption(m: Assistant): number {
 	return priceMessage(m, go) / go.monthly;
 }
 
+// A request's charge against the monthly quota, in plan dollars, plus whatever it billed to the
+// Console balance.
+type GoCharge = { ts: number; allowance: number; credit: number };
+
+// Rows written by the provider_stream_event handler. A line still being appended fails to parse
+// and is skipped; the next render picks it up.
+function ledgerCharges(): GoCharge[] {
+	let raw: string;
+	try {
+		raw = readFileSync(GO_LEDGER, "utf8");
+	} catch {
+		return []; // no request captured yet
+	}
+	const out: GoCharge[] = [];
+	for (const line of raw.split("\n")) {
+		if (!line) continue;
+		try {
+			const e = JSON.parse(line);
+			if (!Number.isFinite(e.ts)) continue;
+			out.push({
+				ts: e.ts,
+				allowance: Number(e.allowance) || 0,
+				credit: e.billing_source === "balance" ? Number(e.cost) || 0 : 0,
+			});
+		} catch {
+			continue;
+		}
+	}
+	return out;
+}
+
+// Charges since `sinceMs`, ledger first and session backfill only where the ledger has no
+// coverage — otherwise every captured request would count twice, once from its message and once
+// from its ledger row.
+function goCharges(sinceMs: number): GoCharge[] {
+	const ledger = ledgerCharges().filter((c) => c.ts >= sinceMs);
+	const backfillFrom = ledger.length > 0 ? Math.min(...ledger.map((c) => c.ts)) : Infinity;
+	const backfill = assistantMessagesSince(sinceMs, "opencode-go")
+		.filter((m) => m.ms < backfillFrom)
+		.map((m) => ({ ts: m.ms, allowance: goConsumption(m) * GO_PLAN_MONTHLY_USD, credit: 0 }));
+	return [...backfill, ...ledger];
+}
+
 // Price one assistant message from its tokens. Unknown models fall back to pi's flat
 // `usage.cost`, so the meter never reads $0 for them.
 function priceMessage(m: Assistant, go: GoModel | undefined): number {
@@ -327,24 +381,27 @@ function priceMessage(m: Assistant, go: GoModel | undefined): number {
 
 function goStatus(ctx: ExtensionContext): string {
 	const now = Date.now();
-	// Every model feeds the same quota, so the windows sum all of them, not just the active one.
-	const share = (since: number) =>
-		assistantMessagesSince(since, "opencode-go").reduce((quota, m) => quota + goConsumption(m), 0);
+	const charges = goCharges(goCycleStart(now));
+	const dollars = (since: number) => charges.filter((c) => c.ts >= since).reduce((sum, c) => sum + c.allowance, 0);
 	// Headroom, not consumption: `5h 98%` means 2% spent, which the label has to say out loud or
 	// it reads as the console's "used". Colour keys off the part spent, so the text can show
 	// what is left without a healthy-looking number hiding a nearly-spent window.
 	// Past 100% Go bills the Console balance instead, so absence of headroom reads `over`.
-	const meter = (label: string, used: number, cap: number) => {
-		const spent = Math.round((used / cap) * 100);
+	const meter = (label: string, spentUsd: number, capUsd: number) => {
+		const spent = Math.round((spentUsd / capUsd) * 100);
 		const left = 100 - spent;
 		return heat(ctx, spent, `${label} ${left >= 0 ? `${left}%` : `${-left}% over`}`);
 	};
 	const meters = [
-		meter("5h", share(now - 5 * 3600_000), 0.2),
-		meter("week", share(goWeeklyStart(now)), 0.5),
-		meter("month", share(goCycleStart(now)), 1),
+		meter("5h", dollars(now - 5 * 3600_000), GO_PLAN_MONTHLY_USD * 0.2),
+		meter("week", dollars(goWeeklyStart(now)), GO_PLAN_MONTHLY_USD * 0.5),
+		meter("month", dollars(goCycleStart(now)), GO_PLAN_MONTHLY_USD),
 	];
-	return `(remaining) ${meters.join(" · ")}`;
+	// Present only once something was actually billed to the balance, which is also the signal
+	// that a window is exhausted. The API never reports the remaining balance.
+	const credit = charges.reduce((sum, c) => sum + c.credit, 0);
+	const suffix = credit > 0 ? ` · credit $${credit.toFixed(2)}` : "";
+	return `(remaining) ${meters.join(" · ")}${suffix}`;
 }
 
 interface FooterState {
@@ -609,6 +666,33 @@ export default function (pi: ExtensionAPI) {
 		}
 		refreshSpeed();
 		void ctx;
+	});
+
+	// The vendor usage block exists only in the raw stream chunk: pi normalizes it away, so it never
+	// reaches the session file and no archive can recover it later. Record every Go request here
+	// while it is still visible — `allowance` is the exact quota charge, `billing_source` says
+	// whether it came out of the plan or the Console balance.
+	pi.on("provider_stream_event", (event: any) => {
+		if (event.provider !== "opencode-go") return;
+		const usage = event.data?.usage;
+		const vendor = usage?.opencode;
+		if (!vendor) return; // every chunk but the final one carries no usage
+		try {
+			mkdirSync(join(HOME, ".local", "state", "pi"), { recursive: true });
+			appendFileSync(
+				GO_LEDGER,
+				`${JSON.stringify({
+					ts: Date.now(),
+					model: event.model,
+					allowance: Number(vendor.allowance) || 0,
+					list_cost: Number(vendor.list_cost) || 0,
+					cost: Number(usage.cost) || 0,
+					billing_source: String(vendor.billing_source ?? ""),
+				})}\n`,
+			);
+		} catch {
+			// A full or read-only disk must not break a model call over a meter.
+		}
 	});
 
 	pi.on("message_end", (event, ctx) => {
