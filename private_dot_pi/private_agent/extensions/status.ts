@@ -41,8 +41,12 @@ const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 // One JSON line per Go request, written from `provider_stream_event`: the only place the vendor
 // usage block survives. Appended by every pi that loads this extension, including pi-worker.
 const GO_LEDGER = join(HOME, ".local", "state", "pi", "go-usage.jsonl");
+// Optional seed for the Console balance, since no API reports it: `{ "balance_usd": 4.28,
+// "as_of": "2026-10-26T15:00:00+07:00" }`. Remaining = seed minus what the ledger billed to the
+// balance after that instant. Re-seed whenever you top up or check the console.
 // The plan's monthly limit in dollars: `allowance` is expressed in these units.
 const GO_PLAN_MONTHLY_USD = 60;
+const GO_CREDIT = join(HOME, ".local", "state", "pi", "go-credit.json");
 // pi-worker (the pi-worker skill) runs its pi child with `--session-dir <run>/sessions`, so
 // delegated work never lands under SESSIONS_DIR. It defaults to a cheap model but escalates to
 // DeepSeek Pro, so leaving it out under-counts exactly the expensive turns.
@@ -379,9 +383,33 @@ function priceMessage(m: Assistant, go: GoModel | undefined): number {
 	) / 1e6;
 }
 
+// The Console balance seed, or undefined when absent/unusable. Spending before `asOf` is already
+// reflected in `base`; only what the ledger billed afterwards is subtracted.
+type CreditSeed = { base: number; asOf: number };
+
+function creditSeed(): CreditSeed | undefined {
+	let raw: any;
+	try {
+		raw = JSON.parse(readFileSync(GO_CREDIT, "utf8"));
+	} catch {
+		return undefined;
+	}
+	const base = Number(raw?.balance_usd);
+	const asOf = Date.parse(String(raw?.as_of ?? ""));
+	return Number.isFinite(base) && Number.isFinite(asOf) ? { base, asOf } : undefined;
+}
+
+function creditRemaining(charges: GoCharge[], seed: CreditSeed): number {
+	return seed.base - charges.filter((c) => c.ts > seed.asOf).reduce((sum, c) => sum + c.credit, 0);
+}
+
 function goStatus(ctx: ExtensionContext): string {
 	const now = Date.now();
-	const charges = goCharges(goCycleStart(now));
+	const cycleStart = goCycleStart(now);
+	// The ledger only has to reach back as far as the seed (or the cycle, whichever is older), so a
+	// seed taken mid-cycle still cannot miss balance spend that happened before it.
+	const seed = creditSeed();
+	const charges = goCharges(seed ? Math.min(cycleStart, seed.asOf) : cycleStart);
 	const dollars = (since: number) => charges.filter((c) => c.ts >= since).reduce((sum, c) => sum + c.allowance, 0);
 	// Headroom, not consumption: `5h 98%` means 2% spent, which the label has to say out loud or
 	// it reads as the console's "used". Colour keys off the part spent, so the text can show
@@ -395,12 +423,21 @@ function goStatus(ctx: ExtensionContext): string {
 	const meters = [
 		meter("5h", dollars(now - 5 * 3600_000), GO_PLAN_MONTHLY_USD * 0.2),
 		meter("week", dollars(goWeeklyStart(now)), GO_PLAN_MONTHLY_USD * 0.5),
-		meter("month", dollars(goCycleStart(now)), GO_PLAN_MONTHLY_USD),
+		meter("month", dollars(cycleStart), GO_PLAN_MONTHLY_USD),
 	];
-	// Present only once something was actually billed to the balance, which is also the signal
-	// that a window is exhausted. The API never reports the remaining balance.
-	const credit = charges.reduce((sum, c) => sum + c.credit, 0);
-	const suffix = credit > 0 ? ` · credit $${credit.toFixed(2)}` : "";
+	// Credit shows what is *left* when a seed exists, else what this cycle has billed to the
+	// balance. Either way it appears only once the balance is in play, which is the signal that a
+	// window is exhausted: the API never reports the balance itself.
+	const billed = charges.reduce((sum, c) => sum + c.credit, 0);
+	const left = seed ? creditRemaining(charges, seed) : Number.NaN;
+	let suffix = "";
+	if (seed) {
+		const text = `credit $${Math.max(0, left).toFixed(2)} left`;
+		const tone = left <= 0 ? "error" : left < 1 ? "warning" : undefined;
+		suffix = ` · ${tone ? ctx.ui.theme.fg(tone, text) : text}`;
+	} else if (billed > 0) {
+		suffix = ` · credit $${billed.toFixed(2)}`;
+	}
 	return `(remaining) ${meters.join(" · ")}${suffix}`;
 }
 
