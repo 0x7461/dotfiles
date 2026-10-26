@@ -13,7 +13,7 @@ import { join } from "node:path";
 // ExDump/Dead zone read off the context window.
 //
 // Segments, left to right:
-//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ <spend>   …   model • thinking | ⚡87% | 14:32
+//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ left 5h N% …   …   model • thinking | ⚡87% | 14:32
 //
 // The model is right-aligned to the terminal edge, as the built-in footer did.
 //
@@ -28,7 +28,9 @@ import { join } from "node:path";
 // fractions (Go reports it per request as `opencode.allowance`; pi drops that field, so it is
 // recomputed from tokens here). The 5-hour window allows 20% of the monthly quota, the week
 // 50%. The week and the billing cycle are fixed buckets — anchored to the console's own reset
-// instants below — while the 5-hour one is treated as rolling. The direct lane is closed
+// instants below — while the 5-hour one is treated as rolling. The segment reports what is
+// **left**, not what is spent: the number you act on is headroom, and colour still follows
+// consumption, so a comfortable remainder never reads green while it is actually running out. The direct lane is closed
 // (2026-10-19). The figure covers this machine's pi sessions only, so it reads a little under
 // the console (unlogged retries and aborted streams are billed upstream), and Go can bill
 // extra usage to the Console balance past 100% — the meter keeps climbing rather than
@@ -328,17 +330,20 @@ function goStatus(ctx: ExtensionContext): string {
 	// Every model feeds the same quota, so the windows sum all of them, not just the active one.
 	const share = (since: number) =>
 		assistantMessagesSince(since, "opencode-go").reduce((quota, m) => quota + goConsumption(m), 0);
+	// Headroom, not consumption: `5h 98%` means 2% spent. Colour keys off the part spent, so the
+	// text can show what is left without a healthy-looking number hiding a nearly-spent window.
+	// Past 100% Go bills the Console balance instead, so absence of headroom reads `over`.
 	const meter = (label: string, used: number, cap: number) => {
-		const pct = Math.round((used / cap) * 100);
-		// Past 100% Go bills the Console balance instead, so the meter keeps climbing.
-		return heat(ctx, pct, `${label} ${pct}%${pct >= 100 ? " over" : ""}`);
+		const spent = Math.round((used / cap) * 100);
+		const left = 100 - spent;
+		return heat(ctx, spent, `${label} ${left >= 0 ? `${left}%` : `${-left}% over`}`);
 	};
 	const meters = [
 		meter("5h", share(now - 5 * 3600_000), 0.2),
 		meter("wk", share(goWeeklyStart(now)), 0.5),
 		meter("month", share(goCycleStart(now)), 1),
 	];
-	return `go ${meters.join(" · ")}`;
+	return `left ${meters.join(" · ")}`;
 }
 
 interface FooterState {
