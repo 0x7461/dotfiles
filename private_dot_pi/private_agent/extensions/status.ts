@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -13,7 +13,7 @@ import { join } from "node:path";
 // ExDump/Dead zone read off the context window.
 //
 // Segments, left to right:
-//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ (remaining) 5h N% …   …   model • thinking | ⚡87% | 14:32
+//   dir (branch) [changed] │ ctx <tokens> (<%>) <zone> │ <tps> │ CH<pct> │ (used) 5h N% …   …   model • thinking | ⚡87% | 14:32
 //
 // The model is right-aligned to the terminal edge, as the built-in footer did.
 //
@@ -30,10 +30,9 @@ import { join } from "node:path";
 // `provider_stream_event` still sees the raw chunk, so those fields are captured into the
 // ledger below; anything older, or from another pi that predates the ledger, is backfilled
 // from tokens at the published rates. The 5-hour window allows 20% of the monthly quota, the
-// week 50%, and every window is **per model**: exhausting Pro leaves Flash's windows untouched,
-// so the numbers are the current model's alone, never a sum across models. The week and the
-// billing cycle are fixed buckets — anchored to the console's own reset instants below — while
-// the 5-hour one is treated as rolling. The segment reports what
+// week 50%, and all three are buckets over one pooled quota: a model's own monthly limit is only
+// the rate its dollars are converted into that pool, so charges from every model are summed. The
+// segment reports what
 // is **left**, not what is spent: the number you act on is headroom, and colour still follows
 // consumption, so a comfortable remainder never reads green while it is actually running out.
 // Past the quota Go bills the Console balance; `credit $X` is what that has cost this cycle
@@ -160,21 +159,54 @@ const GO_MODELS: Record<string, GoModel> = {
 // Unknown model: assume the smallest common allowance so the meter errs toward warn.
 const GO_MONTHLY_USD_DEFAULT = 15;
 
-// The week is a 7-day bucket anchored to the cycle, not a calendar week, and both it and the
-// cycle are fixed buckets rather than rolling windows. Measured against the console on
-// 2026-10-26 12:21, which read Pro `5h 2% · 7d 85% · month 43%`: Pro's own charges gave 43%
-// and 86%, every model summed gave 50% and 100% (GLM-5.3 held 4.4% of the cycle on its own),
-// and a Monday-07:00 calendar week gave 0%. The cycle renews on the 19th around 22:30,
-// Asia/Ho_Chi_Minh; the seed below is that instant, advanced here rather than stored per
-// session. Re-seed when the plan or billing anchor changes — a stale seed shows plausible
-// percentages with no way to notice. The 5-hour window stays rolling: no anchor observed.
+// One quota, three fixed buckets, all account-level: the console's Limits panel read
+// `Rolling 1% (resets in 4h 11m) · Weekly 2% (6d 10h) · Monthly 51% (24d 1h)` at 2026-10-26
+// 20:45, and these buckets reproduce it as 1%, 2.0% and 51.0%. A model's own monthly limit is
+// only the conversion rate into the pool — Pro's $15 makes $1 of its list price cost $4 of the
+// $60, Flash's $80 makes one cost $0.75 — so charges from **every** model are summed, never
+// kept apart. (The console's Models panel, Flash 74% / Pro 25% / GLM-5.3 1%, is a share of the
+// period's traffic, not of the allowance: Pro alone holds 84% of the allowance spend.) Each
+// bucket resets on its own grid, seeded from the console's countdowns below and advanced here
+// rather than stored per session. Re-seed when the plan or billing anchor changes — a stale
+// seed shows plausible percentages with no way to notice.
+// The segment reads consumption or headroom, the console's way or the spare-capacity way; `/go-meter`
+// switches, the choice persists in `~/.local/state/pi/footer.json`, and consumption is the default
+// because that is what the console and every other quota readout shows.
 // The rate table below is backfill only: requests captured in the ledger carry Go's own
 // `allowance`, and a request without one is priced from `list_cost = tokens × rate`, then
 // charged `list_cost × 60 / bucket`. Rates are $/1M tokens; `write` is a priced cache write
 // (Kimi, Qwen, GPT Luna), otherwise an unwritten cache bills as plain input; `tiers` are
 // context-length bands, shortest first. DeepSeek is the only peak-priced family.
-const GO_CYCLE_RESET_SEED = "2026-11-19T22:30:00+07:00";
+const GO_CYCLE_RESET_SEED = "2026-11-19T21:45:00+07:00";
+const GO_WEEK_RESET_SEED = "2026-11-02T06:45:00+07:00";
+const GO_ROLLING_RESET_SEED = "2026-10-27T00:56:00+07:00";
 const WEEK_MS = 7 * 86400_000;
+const ROLLING_MS = 5 * 3600_000;
+
+// Which way the spend segment reads. A display preference, so it lives with the ledger in the
+// pilot's state dir rather than in `settings.json`, which chezmoi owns — a key written into it
+// from here would surface as content drift and be reverted by the next `chezmoi apply`.
+type GoMeterMode = "used" | "remaining";
+const GO_FOOTER_FILE = join(HOME, ".local", "state", "pi", "footer.json");
+
+function loadMeterMode(): GoMeterMode {
+	try {
+		return JSON.parse(readFileSync(GO_FOOTER_FILE, "utf8")).goMeter === "remaining" ? "remaining" : "used";
+	} catch {
+		return "used"; // no file yet: the console-comparable reading
+	}
+}
+
+function saveMeterMode(mode: GoMeterMode): void {
+	try {
+		mkdirSync(join(HOME, ".local", "state", "pi"), { recursive: true });
+		writeFileSync(GO_FOOTER_FILE, `${JSON.stringify({ goMeter: mode })}\n`);
+	} catch {
+		// A read-only state dir must not break the footer over a display preference.
+	}
+}
+
+let goMeterMode: GoMeterMode = loadMeterMode();
 
 // Month arithmetic that clamps to the target month's length, so a seed on the 31st doesn't
 // roll into the next month.
@@ -192,8 +224,18 @@ function plusMonths(t: number, n: number): number {
 // The week bucket starts at the cycle anchor and steps in 7-day units from there, so a cycle's
 // last week is short. Start of the bucket containing `now`.
 function goWeekStart(now: number): number {
-	const cycle = goCycleStart(now);
-	return cycle + Math.floor((now - cycle) / WEEK_MS) * WEEK_MS;
+	let reset = Date.parse(GO_WEEK_RESET_SEED);
+	while (reset <= now) reset += WEEK_MS;
+	return reset - WEEK_MS;
+}
+
+// The 5-hour budget the console calls "Rolling" still has a reset instant, so it is a fixed
+// grid rather than a sliding window: a sliding one would over-count right after a reset, which
+// is the case that matters.
+function goRollingStart(now: number): number {
+	let reset = Date.parse(GO_ROLLING_RESET_SEED);
+	while (reset <= now) reset += ROLLING_MS;
+	return reset - ROLLING_MS;
 }
 
 function goCycleStart(now: number): number {
@@ -325,7 +367,7 @@ function goConsumption(m: Assistant): number {
 
 // A request's charge against the monthly quota, in plan dollars, and where it was billed:
 // "go" on the plan, "balance" past a limit, "" when unknown (session backfill).
-type GoCharge = { ts: number; model: string; allowance: number; source: string };
+type GoCharge = { ts: number; allowance: number; source: string };
 
 // Rows written by the provider_stream_event handler. A line still being appended fails to parse
 // and is skipped; the next render picks it up.
@@ -342,12 +384,7 @@ function ledgerCharges(): GoCharge[] {
 		try {
 			const e = JSON.parse(line);
 			if (!Number.isFinite(e.ts)) continue;
-			out.push({
-				ts: e.ts,
-				model: String(e.model ?? ""),
-				allowance: Number(e.allowance) || 0,
-				source: String(e.billing_source ?? ""),
-			});
+			out.push({ ts: e.ts, allowance: Number(e.allowance) || 0, source: String(e.billing_source ?? "") });
 		} catch {
 			continue;
 		}
@@ -363,7 +400,7 @@ function goCharges(sinceMs: number): GoCharge[] {
 	const backfillFrom = ledger.length > 0 ? Math.min(...ledger.map((c) => c.ts)) : Infinity;
 	const backfill = assistantMessagesSince(sinceMs, "opencode-go")
 		.filter((m) => m.ms < backfillFrom)
-		.map((m) => ({ ts: m.ms, model: m.model, allowance: goConsumption(m) * GO_PLAN_MONTHLY_USD, source: "" }));
+		.map((m) => ({ ts: m.ms, allowance: goConsumption(m) * GO_PLAN_MONTHLY_USD, source: "" }));
 	return [...backfill, ...ledger];
 }
 
@@ -385,22 +422,23 @@ function priceMessage(m: Assistant, go: GoModel | undefined): number {
 function goStatus(ctx: ExtensionContext): string {
 	const now = Date.now();
 	const cycleStart = goCycleStart(now);
-	// Go's allowances are per model, so only the current model's charges count toward the three
-	// windows. A model with no allowance to spend reads 0%, which is the honest answer.
-	const model = (ctx.model?.id ?? "").replace(/^models\//, "");
-	const charges = goCharges(cycleStart).filter((c) => c.model === model);
+	const charges = goCharges(cycleStart);
 	const dollars = (since: number) => charges.filter((c) => c.ts >= since).reduce((sum, c) => sum + c.allowance, 0);
-	// Headroom, not consumption: `5h 98%` means 2% spent, which the label has to say out loud or
-	// it reads as the console's "used". Colour keys off the part spent, so the text can show
-	// what is left without a healthy-looking number hiding a nearly-spent window.
-	// Past 100% Go bills the Console balance instead, so absence of headroom reads `over`.
+	// Consumption by default, headroom on request: the console and pi's own cost line both report
+	// what was spent, so matching them costs no mental subtraction; the headroom reading answers
+	// the other question, how much is left to spend. Colour keys off consumption in both cases, so
+	// a comfortable remainder never reads green while a window is nearly gone. Past 100% Go bills
+	// the Console balance instead, so either reading says `over` once the window is exhausted.
 	const meter = (label: string, spentUsd: number, capUsd: number) => {
 		const spent = Math.round((spentUsd / capUsd) * 100);
-		const left = 100 - spent;
-		return heat(ctx, spent, `${label} ${left >= 0 ? `${left}%` : `${-left}% over`}`);
+		const text =
+			spent > 100
+				? `${goMeterMode === "used" ? spent : spent - 100}% over`
+				: `${goMeterMode === "used" ? spent : 100 - spent}%`;
+		return heat(ctx, spent, `${label} ${text}`);
 	};
 	const meters = [
-		meter("5h", dollars(now - 5 * 3600_000), GO_PLAN_MONTHLY_USD * 0.2),
+		meter("5h", dollars(goRollingStart(now)), GO_PLAN_MONTHLY_USD * 0.2),
 		meter("week", dollars(goWeekStart(now)), GO_PLAN_MONTHLY_USD * 0.5),
 		meter("month", dollars(cycleStart), GO_PLAN_MONTHLY_USD),
 	];
@@ -410,7 +448,7 @@ function goStatus(ctx: ExtensionContext): string {
 	// by no API, and a hand-seeded figure drifts, so the fact is all this claims to know.
 	const latest = charges.filter((c) => c.source).reduce<GoCharge | undefined>((a, c) => (!a || c.ts > a.ts ? c : a), undefined);
 	const suffix = latest?.source === "balance" ? ` · ${ctx.ui.theme.fg("warning", "on credit")}` : "";
-	return `(remaining) ${meters.join(" · ")}${suffix}`;
+	return `(${goMeterMode}) ${meters.join(" · ")}${suffix}`;
 }
 
 interface FooterState {
@@ -575,6 +613,20 @@ export default function (pi: ExtensionAPI) {
 		state.spend = ctx.model?.provider === "opencode-go" ? goStatus(ctx) : undefined;
 		requestRender?.();
 	}
+
+	// Both readings are right for a different question, so the switch is a command rather than a
+	// hardcoded choice — and it persists, because a footer that reverts at every restart is a
+	// footer you stop trusting.
+	pi.registerCommand("go-meter", {
+		description: "Switch the Go spend meter between used and remaining",
+		handler: async (arg, ctx) => {
+			const want = String(arg ?? "").trim().toLowerCase();
+			goMeterMode = want === "used" || want === "remaining" ? want : goMeterMode === "used" ? "remaining" : "used";
+			saveMeterMode(goMeterMode);
+			refreshSpend(ctx);
+			ctx.ui.notify(`Go meter: ${goMeterMode}`, "info");
+		},
+	});
 
 	// Cache-hit rate of the latest assistant response. Go prices a cache hit at a small
 	// fraction of a miss (Flash ~50x, Pro ~30x), so this is the main lever on cost.
