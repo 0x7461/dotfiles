@@ -35,6 +35,10 @@ import { join } from "node:path";
 // stopping there.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
+// pi-worker (the pi-worker skill) runs its pi child with `--session-dir <run>/sessions`, so
+// delegated work never lands under SESSIONS_DIR. It defaults to a cheap model but escalates to
+// DeepSeek Pro, so leaving it out under-counts exactly the expensive turns.
+const WORKER_RUNS_DIR = join(HOME, ".local", "state", "pi-worker");
 const SPEED_THROTTLE_MS = 250;
 
 // OpenCode Go pricing (opencode.ai/docs/go, 2026-10-26; cost model:
@@ -192,27 +196,51 @@ function goIsPeak(ms: number): boolean {
 
 type Assistant = { ms: number; provider: string; model: string; usage: any };
 
-// Assistant messages from every session file touched since `sinceMs`.
+// Every session file under `dir` touched since `sinceMs`, walked because a pi session dir holds
+// one subdirectory per project.
+function sessionFilesSince(dir: string, sinceMs: number, depth = 3): string[] {
+	let names: string[];
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return []; // absent root: interactive sessions always exist, worker runs may not
+	}
+	const out: string[] = [];
+	for (const name of names) {
+		const path = join(dir, name);
+		let st;
+		try {
+			st = statSync(path);
+		} catch {
+			continue;
+		}
+		if (st.isDirectory()) {
+			if (depth > 0) out.push(...sessionFilesSince(path, sinceMs, depth - 1));
+		} else if (name.endsWith(".jsonl") && st.mtimeMs >= sinceMs) out.push(path);
+	}
+	return out;
+}
+
+// Assistant messages from every session file touched since `sinceMs`, interactive and delegated.
 function assistantMessagesSince(sinceMs: number, provider: string): Assistant[] {
 	const found: Assistant[] = [];
-	for (const dir of readdirSync(SESSIONS_DIR, { withFileTypes: true })) {
-		if (!dir.isDirectory()) continue;
-		for (const name of readdirSync(join(SESSIONS_DIR, dir.name))) {
-			const path = join(SESSIONS_DIR, dir.name, name);
-			if (!name.endsWith(".jsonl") || statSync(path).mtimeMs < sinceMs) continue;
-			for (const line of readFileSync(path, "utf8").split("\n")) {
-				if (!line.includes(`"provider":"${provider}"`)) continue;
-				let entry;
-				try {
-					entry = JSON.parse(line);
-				} catch {
-					continue; // a line pi is still writing
-				}
-				const msg = entry.message;
-				if (entry.type !== "message" || msg?.role !== "assistant" || msg.provider !== provider) continue;
-				const ms = Date.parse(entry.timestamp);
-				if (ms >= sinceMs) found.push({ ms, provider, model: msg.model, usage: msg.usage ?? {} });
+	const files = [
+		...sessionFilesSince(SESSIONS_DIR, sinceMs),
+		...sessionFilesSince(WORKER_RUNS_DIR, sinceMs, 4),
+	];
+	for (const path of files) {
+		for (const line of readFileSync(path, "utf8").split("\n")) {
+			if (!line.includes(`"provider":"${provider}"`)) continue;
+			let entry;
+			try {
+				entry = JSON.parse(line);
+			} catch {
+				continue; // a line pi is still writing
 			}
+			const msg = entry.message;
+			if (entry.type !== "message" || msg?.role !== "assistant" || msg.provider !== provider) continue;
+			const ms = Date.parse(entry.timestamp);
+			if (ms >= sinceMs) found.push({ ms, provider, model: msg.model, usage: msg.usage ?? {} });
 		}
 	}
 	return found;
