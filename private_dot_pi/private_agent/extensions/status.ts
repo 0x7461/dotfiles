@@ -27,9 +27,12 @@ import { join } from "node:path";
 // four times the quota a dollar on a $60 model does, and the plan meter is the sum of those
 // fractions (Go reports it per request as `opencode.allowance`; pi drops that field, so it is
 // recomputed from tokens here). The 5-hour window allows 20% of the monthly quota, the week
-// 50%. The direct lane is closed (2026-10-19). The figure covers this machine's pi sessions
-// only, and Go can bill extra usage to the Console balance past 100% — the meter keeps
-// climbing rather than stopping there.
+// 50%. The week and the billing cycle are fixed buckets — anchored to the console's own reset
+// instants below — while the 5-hour one is treated as rolling. The direct lane is closed
+// (2026-10-19). The figure covers this machine's pi sessions only, so it reads a little under
+// the console (unlogged retries and aborted streams are billed upstream), and Go can bill
+// extra usage to the Console balance past 100% — the meter keeps climbing rather than
+// stopping there.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 const SPEED_THROTTLE_MS = 250;
@@ -143,6 +146,43 @@ const GO_MODELS: Record<string, GoModel> = {
 // Unknown model: assume the smallest common allowance so the meter errs toward warn.
 const GO_MONTHLY_USD_DEFAULT = 15;
 
+// Go's week and cycle are fixed buckets on the subscription's own schedule, not rolling
+// windows: a rolling 7d keeps counting the previous week's usage, so it read 91% while the
+// console said 0% (2026-10-26). Both reset instants come from the console's Go page — weekly
+// Mondays 07:00, cycle renews on the 19th around 22:30, Asia/Ho_Chi_Minh — and are advanced
+// here rather than stored per session. Re-seed when the plan or billing anchor changes; a
+// stale seed shows plausible percentages with no way to notice.
+const GO_WEEK_RESET_SEED = "2026-11-02T07:00:00+07:00";
+const GO_CYCLE_RESET_SEED = "2026-11-19T22:30:00+07:00";
+const WEEK_MS = 7 * 86400_000;
+
+// Month arithmetic that clamps to the target month's length, so a seed on the 31st doesn't
+// roll into the next month.
+function plusMonths(t: number, n: number): number {
+	const d = new Date(t);
+	const day = d.getUTCDate();
+	const target = new Date(t);
+	target.setUTCDate(1);
+	target.setUTCMonth(target.getUTCMonth() + n);
+	const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+	target.setUTCDate(Math.min(day, lastDay));
+	return target.getTime();
+}
+
+// Start of the bucket containing `now`: advance the seed to the next reset, then step back one
+// period. Rolling windows would over-count right after a reset, which is the case that matters.
+function goWeeklyStart(now: number): number {
+	let reset = Date.parse(GO_WEEK_RESET_SEED);
+	while (reset <= now) reset += WEEK_MS;
+	return reset - WEEK_MS;
+}
+
+function goCycleStart(now: number): number {
+	let reset = Date.parse(GO_CYCLE_RESET_SEED);
+	while (reset <= now) reset = plusMonths(reset, 1);
+	return plusMonths(reset, -1);
+}
+
 function goIsPeak(ms: number): boolean {
 	const d = new Date(ms);
 	const day = d.getUTCDay();
@@ -176,11 +216,6 @@ function assistantMessagesSince(sinceMs: number, provider: string): Assistant[] 
 		}
 	}
 	return found;
-}
-
-function monthStart(now: number): number {
-	const d = new Date(now);
-	return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
 }
 
 function heat(ctx: ExtensionContext, pct: number, text: string): string {
@@ -272,8 +307,8 @@ function goStatus(ctx: ExtensionContext): string {
 	};
 	const meters = [
 		meter("5h", share(now - 5 * 3600_000), 0.2),
-		meter("7d", share(now - 7 * 86400_000), 0.5),
-		meter("month", share(monthStart(now)), 1),
+		meter("wk", share(goWeeklyStart(now)), 0.5),
+		meter("month", share(goCycleStart(now)), 1),
 	];
 	return `go ${meters.join(" · ")}`;
 }
