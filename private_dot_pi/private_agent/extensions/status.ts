@@ -22,17 +22,24 @@ import { join } from "node:path";
 // actionable) and pi's session cost — the spend segment below prices the paid host itself.
 //
 // The spend segment covers the one paid host (ithaca PLAN, Decisions): opencode-go — a flat
-// subscription with per-model capped allowances. Usage is priced from tokens at Go's
-// peak/off-peak rates (pi's `usage.cost` is flat off-peak, which under-counts peak 2×), then
-// compared to the active model's monthly allowance. The direct lane is closed (2026-10-19).
-// The figure covers this machine's pi sessions only.
+// subscription with one shared usage quota, not a set of independent per-model buckets. The
+// per-model dollar figures Go publishes are *rates*: a dollar spent on a $15 model consumes
+// four times the quota a dollar on a $60 model does, and the plan meter is the sum of those
+// fractions (Go reports it per request as `opencode.allowance`; pi drops that field, so it is
+// recomputed from tokens here). The 5-hour window allows 20% of the monthly quota, the week
+// 50%. The direct lane is closed (2026-10-19). The figure covers this machine's pi sessions
+// only, and Go can bill extra usage to the Console balance past 100% — the meter keeps
+// climbing rather than stopping there.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 const SPEED_THROTTLE_MS = 250;
 
-// OpenCode Go pricing (opencode.ai/docs/go, 2026-10-26). Go is a flat subscription whose
-// budget is split into per-model dollar allowances: each model is metered independently,
-// the 5h window is 20% of its monthly limit and the week 50%. `monthly` is that limit.
+// OpenCode Go pricing (opencode.ai/docs/go, 2026-10-26; cost model:
+// opencode.ai/v2/docs/console/api/inference → Cost). Go's budget is one shared quota, and the
+// per-model dollar figures below are rates against it: each model's `monthly` is the bucket
+// its dollars are measured in, so one dollar on a $15 model is worth four on a $60 model.
+// Re-check the buckets when Go reprices — DeepSeek's moved twice in two days in the 2026-10
+// reshuffle, and both the bucket and the token price changed at once.
 //
 // Rates are $/1M tokens at list price. `write` is a priced cache write (Kimi, Qwen, GPT
 // Luna); where Go doesn't price it, an unwritten cache bills as plain input. `tiers` are
@@ -228,6 +235,16 @@ function goRateAt(m: GoModel, promptTokens: number, ms: number): GoRate {
 	};
 }
 
+// One message's share of the monthly quota: its price divided by its model's bucket. Unknown
+// models fall back to pi's `usage.cost` against the smallest bucket, so the meter errs toward
+// warn rather than reading free.
+function goConsumption(m: Assistant): number {
+	const go = GO_MODELS[m.model];
+	if (!go) return (m.usage.cost?.total ?? 0) / GO_MONTHLY_USD_DEFAULT;
+	if (!Number.isFinite(go.monthly)) return 0;
+	return priceMessage(m, go) / go.monthly;
+}
+
 // Price one assistant message from its tokens. Unknown models fall back to pi's flat
 // `usage.cost`, so the meter never reads $0 for them.
 function priceMessage(m: Assistant, go: GoModel | undefined): number {
@@ -244,23 +261,19 @@ function priceMessage(m: Assistant, go: GoModel | undefined): number {
 }
 
 function goStatus(ctx: ExtensionContext): string {
-	const model = ctx.model?.id?.replace(/^models\//, "");
-	const go = model ? GO_MODELS[model] : undefined;
-	const capUsd = go?.monthly ?? GO_MONTHLY_USD_DEFAULT;
 	const now = Date.now();
-	// Go meters each model's allowance independently, so sum only the active model's usage.
-	const spend = (since: number) =>
-		assistantMessagesSince(since, "opencode-go")
-			.filter((m) => m.model === model)
-			.reduce((usd, m) => usd + priceMessage(m, go), 0);
-	const meter = (label: string, usd: number, cap: number) => {
-		const pct = Math.round((usd / cap) * 100);
-		return heat(ctx, pct, `${label} ${pct}%`);
+	// Every model feeds the same quota, so the windows sum all of them, not just the active one.
+	const share = (since: number) =>
+		assistantMessagesSince(since, "opencode-go").reduce((quota, m) => quota + goConsumption(m), 0);
+	const meter = (label: string, used: number, cap: number) => {
+		const pct = Math.round((used / cap) * 100);
+		// Past 100% Go bills the Console balance instead, so the meter keeps climbing.
+		return heat(ctx, pct, `${label} ${pct}%${pct >= 100 ? " over" : ""}`);
 	};
 	const meters = [
-		meter("5h", spend(now - 5 * 3600_000), capUsd * 0.2),
-		meter("7d", spend(now - 7 * 86400_000), capUsd * 0.5),
-		meter("month", spend(monthStart(now)), capUsd),
+		meter("5h", share(now - 5 * 3600_000), 0.2),
+		meter("7d", share(now - 7 * 86400_000), 0.5),
+		meter("month", share(monthStart(now)), 1),
 	];
 	return `go ${meters.join(" · ")}`;
 }
