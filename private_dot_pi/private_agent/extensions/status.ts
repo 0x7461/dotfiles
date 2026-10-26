@@ -30,34 +30,111 @@ const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 const SPEED_THROTTLE_MS = 250;
 
-// OpenCode Go per-model monthly allowances, $/mo (opencode.ai/docs/go, 2026-10-19). Each
-// model is metered independently; the 5h window is 20% of the monthly limit, the weekly 50%.
-const GO_MONTHLY_USD: Record<string, number> = {
-	"deepseek-v4-pro": 15,
-	"deepseek-v4.1-flash": 80,
-	"deepseek-v4-flash": 80, // legacy id; billed as v4.1
-};
-// Unknown model: assume the smallest common allowance so the meter errs toward warn.
-const GO_MONTHLY_USD_DEFAULT = 15;
+// OpenCode Go pricing (opencode.ai/docs/go, 2026-10-26). Go is a flat subscription whose
+// budget is split into per-model dollar allowances: each model is metered independently,
+// the 5h window is 20% of its monthly limit and the week 50%. `monthly` is that limit.
+//
+// Rates are $/1M tokens at list price. `write` is a priced cache write (Kimi, Qwen, GPT
+// Luna); where Go doesn't price it, an unwritten cache bills as plain input. `tiers` are
+// context-length bands, shortest first — the last entry applies above its predecessor.
+// DeepSeek is the only peak-priced family (2x on Mon-Fri 01:00-04:00 & 06:00-10:00 UTC).
+type GoRate = { hit: number; miss: number; out: number; write?: number };
+type GoTier = { upTo?: number; rate: GoRate };
+type GoModel = { monthly: number; tiers: GoTier[]; peakFactor?: number; promoUntil?: string };
 
-// Go per-model rates, $/1M tokens (opencode.ai/docs/go, 2026-10-19). Peak is Mon–Fri
-// 01:00–04:00 & 06:00–10:00 UTC (2× off-peak). Cache write is unpriced, so a cache miss
-// bills as plain input.
-type GoRates = { peak: { hit: number; miss: number; out: number }; off: { hit: number; miss: number; out: number } };
-const GO_RATES: Record<string, GoRates> = {
+const GO_PROMO_FACTOR = 0.5; // Gemini 4 Argon: 50% off through 2026-11-30
+
+const GO_MODELS: Record<string, GoModel> = {
 	"deepseek-v4-pro": {
-		peak: { hit: 0.044, miss: 1.32, out: 3.96 },
-		off: { hit: 0.022, miss: 0.66, out: 1.98 },
+		monthly: 15,
+		peakFactor: 2,
+		tiers: [{ rate: { hit: 0.022, miss: 0.66, out: 1.98 } }],
 	},
 	"deepseek-v4.1-flash": {
-		peak: { hit: 0.006, miss: 0.3, out: 1.2 },
-		off: { hit: 0.003, miss: 0.15, out: 0.6 },
+		monthly: 80,
+		peakFactor: 2,
+		tiers: [{ rate: { hit: 0.003, miss: 0.15, out: 0.6 } }],
 	},
 	"deepseek-v4-flash": {
-		peak: { hit: 0.006, miss: 0.3, out: 1.2 },
-		off: { hit: 0.003, miss: 0.15, out: 0.6 },
+		monthly: 80, // legacy id; billed as v4.1
+		peakFactor: 2,
+		tiers: [{ rate: { hit: 0.003, miss: 0.15, out: 0.6 } }],
 	},
+	// Go's page lists `gemini-4-argon`; pi's catalog uses the -contributor id. Price both,
+	// and check the training terms before pointing private work at the contributor id.
+	"gemini-4-argon": {
+		monthly: 30,
+		promoUntil: "2026-11-30T23:59:59Z",
+		tiers: [{ rate: { hit: 0.2, miss: 4, out: 20 } }],
+	},
+	"gemini-4-argon-contributor": {
+		monthly: 30,
+		promoUntil: "2026-11-30T23:59:59Z",
+		tiers: [{ rate: { hit: 0.2, miss: 4, out: 20 } }],
+	},
+	"claude-haiku-5-5": {
+		monthly: 15,
+		tiers: [
+			{ upTo: 100_000, rate: { hit: 0.01, miss: 0.1, out: 0.5, write: 0.125 } },
+			{ rate: { hit: 0.05, miss: 0.5, out: 2.5, write: 0.625 } },
+		],
+	},
+	"gpt-6-luna": {
+		monthly: 15,
+		tiers: [
+			{ upTo: 272_000, rate: { hit: 0.01, miss: 0.1, out: 0.5, write: 0.125 } },
+			{ rate: { hit: 0.02, miss: 0.2, out: 0.75, write: 0.25 } },
+		],
+	},
+	"gpt-5.6-luna": {
+		monthly: 15,
+		tiers: [
+			{ upTo: 272_000, rate: { hit: 0.02, miss: 0.2, out: 1.2, write: 0.25 } },
+			{ rate: { hit: 0.04, miss: 0.4, out: 1.8, write: 0.5 } },
+		],
+	},
+	"grok-4.7": {
+		monthly: 15,
+		tiers: [
+			{ upTo: 200_000, rate: { hit: 0.5, miss: 2, out: 6 } },
+			{ rate: { hit: 1, miss: 4, out: 12 } },
+		],
+	},
+	"kimi-k3": { monthly: 15, tiers: [{ rate: { hit: 0.3, miss: 3, out: 15, write: 3 } }] },
+	"kimi-k3.1-pro": { monthly: 15, tiers: [{ rate: { hit: 0.2, miss: 2, out: 10, write: 2 } }] },
+	"kimi-k2.7-code": { monthly: 60, tiers: [{ rate: { hit: 0.19, miss: 0.95, out: 4 } }] },
+	"qwen3.8-max": { monthly: 15, tiers: [{ rate: { hit: 0.25, miss: 2, out: 6, write: 2.5 } }] },
+	"qwen3.8-flash": { monthly: 30, tiers: [{ rate: { hit: 0.016, miss: 0.15, out: 0.47, write: 0.2 } }] },
+	"qwen3.7-plus": {
+		monthly: 60,
+		tiers: [
+			{ upTo: 256_000, rate: { hit: 0.04, miss: 0.4, out: 1.6, write: 0.5 } },
+			{ rate: { hit: 0.12, miss: 1.2, out: 4.8, write: 1.5 } },
+		],
+	},
+	"glm-5.3": { monthly: 15, tiers: [{ rate: { hit: 0.26, miss: 1.4, out: 4.4 } }] },
+	"glm-5.3-flash": { monthly: 60, tiers: [{ rate: { hit: 0.03, miss: 0.15, out: 0.5 } }] },
+	"glm-5.2": { monthly: 60, tiers: [{ rate: { hit: 0.26, miss: 1.4, out: 4.4 } }] },
+	"minimax-m3": { monthly: 60, tiers: [{ rate: { hit: 0.06, miss: 0.3, out: 1.2 } }] },
+	"minimax-m3.1-flash": { monthly: 20, tiers: [{ rate: { hit: 0.015, miss: 0.15, out: 0.6 } }] },
+	"mimo-v2.6-flash": { monthly: 60, tiers: [{ rate: { hit: 0.0028, miss: 0.14, out: 0.28 } }] },
+	"mimo-v2.6-pro": { monthly: 15, tiers: [{ rate: { hit: 0.003625, miss: 0.435, out: 0.87 } }] },
+	"mimo-v2.5": { monthly: 60, tiers: [{ rate: { hit: 0.0028, miss: 0.14, out: 0.28 } }] },
+	"mimo-v2.5-pro": { monthly: 15, tiers: [{ rate: { hit: 0.003625, miss: 0.435, out: 0.87 } }] },
+	"hy3": { monthly: 60, tiers: [{ rate: { hit: 0.035, miss: 0.14, out: 0.58 } }] },
+	"hy4-preview": { monthly: 30, tiers: [{ rate: { hit: 0.042, miss: 0.834, out: 2.501 } }] },
+	"longcat-2.0": { monthly: 60, tiers: [{ rate: { hit: 0.006, miss: 0.3, out: 1.2 } }] },
+	"step-5-preview": { monthly: 15, tiers: [{ rate: { hit: 0.1, miss: 1, out: 2.7 } }] },
+	"muse-spark-1.3-contributor": { monthly: 60, tiers: [{ rate: { hit: 0.002, miss: 0.1, out: 0.2 } }] },
+	"muse-spark-1.2-contributor": { monthly: 60, tiers: [{ rate: { hit: 0.002, miss: 0.1, out: 0.2 } }] },
+	// Free-tier ids: no allowance to spend, so a meter reading 0% is the honest answer.
+	"beam-free": { monthly: Infinity, tiers: [{ rate: { hit: 0, miss: 0, out: 0 } }] },
+	"longcat-2.5-preview-free": { monthly: Infinity, tiers: [{ rate: { hit: 0, miss: 0, out: 0 } }] },
+	"minimax-m3.1-flash-free": { monthly: Infinity, tiers: [{ rate: { hit: 0, miss: 0, out: 0 } }] },
 };
+
+// Unknown model: assume the smallest common allowance so the meter errs toward warn.
+const GO_MONTHLY_USD_DEFAULT = 15;
 
 function goIsPeak(ms: number): boolean {
 	const d = new Date(ms);
@@ -134,25 +211,48 @@ function contextZoneColor(zone: string): "warning" | "error" | undefined {
 	return undefined;
 }
 
-// Price one assistant message at the model's peak or off-peak rate. Unknown models fall
-// back to pi's flat `usage.cost` (off-peak), so the meter never reads $0 for them.
-function priceMessage(m: Assistant, rates: GoRates | undefined): number {
-	if (!rates) return m.usage.cost?.total ?? 0;
+// Rate in force for a message: the band its prompt size falls in, then the peak multiplier
+// and any dated promo, both evaluated at the message's own timestamp rather than now.
+function goRateAt(m: GoModel, promptTokens: number, ms: number): GoRate {
+	const tier = m.tiers.find((t) => t.upTo === undefined || promptTokens <= t.upTo) ?? m.tiers[m.tiers.length - 1];
+	const r = tier.rate;
+	const factor =
+		(m.peakFactor && goIsPeak(ms) ? m.peakFactor : 1) *
+		(m.promoUntil && ms <= Date.parse(m.promoUntil) ? GO_PROMO_FACTOR : 1);
+	if (factor === 1) return r;
+	return {
+		hit: r.hit * factor,
+		miss: r.miss * factor,
+		out: r.out * factor,
+		write: r.write && r.write * factor,
+	};
+}
+
+// Price one assistant message from its tokens. Unknown models fall back to pi's flat
+// `usage.cost`, so the meter never reads $0 for them.
+function priceMessage(m: Assistant, go: GoModel | undefined): number {
+	if (!go) return m.usage.cost?.total ?? 0;
 	const u = m.usage;
-	const r = goIsPeak(m.ms) ? rates.peak : rates.off;
-	return ((u.cacheRead ?? 0) * r.hit + ((u.input ?? 0) + (u.cacheWrite ?? 0)) * r.miss + (u.output ?? 0) * r.out) / 1e6;
+	const prompt = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+	const r = goRateAt(go, prompt, m.ms);
+	return (
+		(u.cacheRead ?? 0) * r.hit +
+		(u.input ?? 0) * r.miss +
+		(u.cacheWrite ?? 0) * (r.write ?? r.miss) +
+		(u.output ?? 0) * r.out
+	) / 1e6;
 }
 
 function goStatus(ctx: ExtensionContext): string {
 	const model = ctx.model?.id?.replace(/^models\//, "");
-	const capUsd = model ? (GO_MONTHLY_USD[model] ?? GO_MONTHLY_USD_DEFAULT) : GO_MONTHLY_USD_DEFAULT;
-	const rates = model ? GO_RATES[model] : undefined;
+	const go = model ? GO_MODELS[model] : undefined;
+	const capUsd = go?.monthly ?? GO_MONTHLY_USD_DEFAULT;
 	const now = Date.now();
 	// Go meters each model's allowance independently, so sum only the active model's usage.
 	const spend = (since: number) =>
 		assistantMessagesSince(since, "opencode-go")
 			.filter((m) => m.model === model)
-			.reduce((usd, m) => usd + priceMessage(m, rates), 0);
+			.reduce((usd, m) => usd + priceMessage(m, go), 0);
 	const meter = (label: string, usd: number, cap: number) => {
 		const pct = Math.round((usd / cap) * 100);
 		return heat(ctx, pct, `${label} ${pct}%`);
