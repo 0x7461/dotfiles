@@ -30,8 +30,10 @@ import { join } from "node:path";
 // `provider_stream_event` still sees the raw chunk, so those fields are captured into the
 // ledger below; anything older, or from another pi that predates the ledger, is backfilled
 // from tokens at the published rates. The 5-hour window allows 20% of the monthly quota, the
-// week 50%. The week and the billing cycle are fixed buckets — anchored to the console's own
-// reset instants below — while the 5-hour one is treated as rolling. The segment reports what
+// week 50%, and every window is **per model**: exhausting Pro leaves Flash's windows untouched,
+// so the numbers are the current model's alone, never a sum across models. The week and the
+// billing cycle are fixed buckets — anchored to the console's own reset instants below — while
+// the 5-hour one is treated as rolling. The segment reports what
 // is **left**, not what is spent: the number you act on is headroom, and colour still follows
 // consumption, so a comfortable remainder never reads green while it is actually running out.
 // Past the quota Go bills the Console balance; `credit $X` is what that has cost this cycle
@@ -158,18 +160,19 @@ const GO_MODELS: Record<string, GoModel> = {
 // Unknown model: assume the smallest common allowance so the meter errs toward warn.
 const GO_MONTHLY_USD_DEFAULT = 15;
 
-// Go's week and cycle are fixed buckets on the subscription's own schedule, not rolling
-// windows: a rolling 7d keeps counting the previous week's usage, so it read 91% while the
-// console said 0% (2026-10-26). Both reset instants come from the console's Go page — weekly
-// Mondays 07:00, cycle renews on the 19th around 22:30, Asia/Ho_Chi_Minh — and are advanced
-// here rather than stored per session. Re-seed when the plan or billing anchor changes; a
-// stale seed shows plausible percentages with no way to notice.
+// The week is a 7-day bucket anchored to the cycle, not a calendar week, and both it and the
+// cycle are fixed buckets rather than rolling windows. Measured against the console on
+// 2026-10-26 12:21, which read Pro `5h 2% · 7d 85% · month 43%`: Pro's own charges gave 43%
+// and 86%, every model summed gave 50% and 100% (GLM-5.3 held 4.4% of the cycle on its own),
+// and a Monday-07:00 calendar week gave 0%. The cycle renews on the 19th around 22:30,
+// Asia/Ho_Chi_Minh; the seed below is that instant, advanced here rather than stored per
+// session. Re-seed when the plan or billing anchor changes — a stale seed shows plausible
+// percentages with no way to notice. The 5-hour window stays rolling: no anchor observed.
 // The rate table below is backfill only: requests captured in the ledger carry Go's own
 // `allowance`, and a request without one is priced from `list_cost = tokens × rate`, then
 // charged `list_cost × 60 / bucket`. Rates are $/1M tokens; `write` is a priced cache write
 // (Kimi, Qwen, GPT Luna), otherwise an unwritten cache bills as plain input; `tiers` are
 // context-length bands, shortest first. DeepSeek is the only peak-priced family.
-const GO_WEEK_RESET_SEED = "2026-11-02T07:00:00+07:00";
 const GO_CYCLE_RESET_SEED = "2026-11-19T22:30:00+07:00";
 const WEEK_MS = 7 * 86400_000;
 
@@ -186,12 +189,11 @@ function plusMonths(t: number, n: number): number {
 	return target.getTime();
 }
 
-// Start of the bucket containing `now`: advance the seed to the next reset, then step back one
-// period. Rolling windows would over-count right after a reset, which is the case that matters.
-function goWeeklyStart(now: number): number {
-	let reset = Date.parse(GO_WEEK_RESET_SEED);
-	while (reset <= now) reset += WEEK_MS;
-	return reset - WEEK_MS;
+// The week bucket starts at the cycle anchor and steps in 7-day units from there, so a cycle's
+// last week is short. Start of the bucket containing `now`.
+function goWeekStart(now: number): number {
+	const cycle = goCycleStart(now);
+	return cycle + Math.floor((now - cycle) / WEEK_MS) * WEEK_MS;
 }
 
 function goCycleStart(now: number): number {
@@ -323,7 +325,7 @@ function goConsumption(m: Assistant): number {
 
 // A request's charge against the monthly quota, in plan dollars, and where it was billed:
 // "go" on the plan, "balance" past a limit, "" when unknown (session backfill).
-type GoCharge = { ts: number; allowance: number; source: string };
+type GoCharge = { ts: number; model: string; allowance: number; source: string };
 
 // Rows written by the provider_stream_event handler. A line still being appended fails to parse
 // and is skipped; the next render picks it up.
@@ -340,7 +342,12 @@ function ledgerCharges(): GoCharge[] {
 		try {
 			const e = JSON.parse(line);
 			if (!Number.isFinite(e.ts)) continue;
-			out.push({ ts: e.ts, allowance: Number(e.allowance) || 0, source: String(e.billing_source ?? "") });
+			out.push({
+				ts: e.ts,
+				model: String(e.model ?? ""),
+				allowance: Number(e.allowance) || 0,
+				source: String(e.billing_source ?? ""),
+			});
 		} catch {
 			continue;
 		}
@@ -356,7 +363,7 @@ function goCharges(sinceMs: number): GoCharge[] {
 	const backfillFrom = ledger.length > 0 ? Math.min(...ledger.map((c) => c.ts)) : Infinity;
 	const backfill = assistantMessagesSince(sinceMs, "opencode-go")
 		.filter((m) => m.ms < backfillFrom)
-		.map((m) => ({ ts: m.ms, allowance: goConsumption(m) * GO_PLAN_MONTHLY_USD, source: "" }));
+		.map((m) => ({ ts: m.ms, model: m.model, allowance: goConsumption(m) * GO_PLAN_MONTHLY_USD, source: "" }));
 	return [...backfill, ...ledger];
 }
 
@@ -378,7 +385,10 @@ function priceMessage(m: Assistant, go: GoModel | undefined): number {
 function goStatus(ctx: ExtensionContext): string {
 	const now = Date.now();
 	const cycleStart = goCycleStart(now);
-	const charges = goCharges(cycleStart);
+	// Go's allowances are per model, so only the current model's charges count toward the three
+	// windows. A model with no allowance to spend reads 0%, which is the honest answer.
+	const model = (ctx.model?.id ?? "").replace(/^models\//, "");
+	const charges = goCharges(cycleStart).filter((c) => c.model === model);
 	const dollars = (since: number) => charges.filter((c) => c.ts >= since).reduce((sum, c) => sum + c.allowance, 0);
 	// Headroom, not consumption: `5h 98%` means 2% spent, which the label has to say out loud or
 	// it reads as the console's "used". Colour keys off the part spent, so the text can show
@@ -391,7 +401,7 @@ function goStatus(ctx: ExtensionContext): string {
 	};
 	const meters = [
 		meter("5h", dollars(now - 5 * 3600_000), GO_PLAN_MONTHLY_USD * 0.2),
-		meter("week", dollars(goWeeklyStart(now)), GO_PLAN_MONTHLY_USD * 0.5),
+		meter("week", dollars(goWeekStart(now)), GO_PLAN_MONTHLY_USD * 0.5),
 		meter("month", dollars(cycleStart), GO_PLAN_MONTHLY_USD),
 	];
 	// Go bills the Console balance once a window is exhausted and says so on every response, so the
