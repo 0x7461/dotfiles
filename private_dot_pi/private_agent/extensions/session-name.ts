@@ -1,140 +1,129 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
 
 // The /resume picker shows the session name *instead of* the first message
-// (docs/session-format.md:207). A session opened by a skill therefore lists the whole skill body as
-// its row — unreadable, and impossible to tell apart from the next skill run.
+// (docs/session-format.md:207) — and the whole first message when no name is set, which for a
+// skill-opened session is the skill's body. This names the session once, from the first prompt that
+// carries real words, and then never touches it again.
 //
-// The name has to survive drift: a long session spans topics and may compact several times, so the
-// first message is only a floor. The real signal is the checkpoint objective — the sentence a human
-// wrote when they stopped to say what the work was (ithaca's work journal). It is adopted as soon as
-// one exists, and a name set with /name, --name or ctrl+r is never touched.
+// Two rules that look arbitrary and are not:
+// - A bare handshake (`Reply ok`, the shape every probe and smoke test opens with) names *nothing*.
+//   A one-turn probe then stays visibly unnamed instead of collecting a row that says "Reply ok" six
+//   times over, and a multi-turn run still gets named by its first real request.
+// - A message that is nothing but a skill body names the session `/skill` and stays provisional: the
+//   next turn with real prose replaces it, before the row has been read. Any other name — /name,
+//   --name, ctrl+r — locks the session permanently.
+//
+// Newlines fold into spaces before the length cut. Splitting at the first line first was a bug: a
+// handoff prompt ("Continue the X1C setup. Read ~/x1c-setup-handoff.md first — <actual task>") lost
+// its task to a 60-character budget, and five resumed sessions shared an identical prefix.
 
-const NAME_MAX = 60;
-const WORK_ROOT = process.env.ITHACA_CONTEXT_ROOT ?? join(homedir(), ".local", "share", "ithaca", "work");
+const MAX_NAME_CHARS = 110;
 
-// Skill bodies arrive as user text wrapped in a <skill …> element; the first line after it is the
-// user's actual request. Also seen: <command …>, <custom-instructions>, and image markers.
-const WRAPPED = /<(skill|command|custom-instructions|system)[\s\S]*?<\/\1>/g;
-// A skill-only message (the whole prompt is the skill body) leaves nothing after stripping, so the
-// skill's own name becomes the row: "recap", not three kilobytes of instructions.
-const NAMED = /<(?:skill|command|template)\s+name="([^"]+)"/g;
-const MARKER = /\[(image|file|attachment)[^\]]*\]/gi;
+// Line-anchored so a prompt that *discusses* this markup (inside backticks) survives intact.
+const BLOCK_WRAPPER = /(?:^|\n)[ \t]*<(skill|command)\b([^>]*)>[\s\S]*?<\/\1>[ \t]*(?=\n|$)/gi;
+const NAME_ATTR = /\bname\s*=\s*(?:"([^"]+)"|'([^']+)')/i;
+const IMAGE_MARKER = /(?:!\[[^\]]*\]\([^)]*\)|\[(?:image|file|attachment)[^\]]*\]|<image\b[^>]*>[\s\S]*?<\/image>|<image\b[^>]*\/>)/gi;
+const FENCED_BLOCK = /(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:\1|$)/g;
+// A probe that appended a payload to its ping keeps the payload as the name.
+const REPLY_OK_TITLE = /^reply\s+ok[.:—-]+\s*(.+)$/i;
+const BARE_PING = /^reply(?:\s+with\s+exactly:?)?\s+ok(?:\s+hello)?[.!]*$/i;
 
-/** The first user text in the active branch, or "" when there is none yet. */
-export function firstUserText(entries: any[]): string {
-	for (const entry of entries) {
-		if (entry?.type !== "message" || entry.message?.role !== "user") continue;
-		const content = entry.message.content;
-		const text =
-			typeof content === "string"
-				? content
-				: Array.isArray(content)
-					? content.filter((p: any) => p?.type === "text" && typeof p.text === "string").map((p: any) => p.text).join("\n")
-					: "";
-		if (deriveName(text)) return text;
-	}
-	return "";
+export type DerivedName =
+	| { kind: "final"; name: string }
+	| { kind: "provisional"; name: string }
+	| { kind: "ping" }
+	| { kind: "empty" };
+
+function collapse(text: string): string {
+	return text.replace(/\s+/g, " ").trim();
 }
 
-/** One line, cut at a word boundary, no trailing punctuation, short enough for a picker row. */
-export function shorten(text: string): string {
-	const line = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
-	const name = line.replace(/\s+/g, " ").replace(/[.:;,?!]+$/, "").trim();
-	if (name.length <= NAME_MAX) return name;
-	const cut = name.slice(0, NAME_MAX);
+/** Cut on a word boundary, with an ellipsis when shortened, so a long prompt is visibly truncated. */
+export function truncateAtWord(text: string, maxChars = MAX_NAME_CHARS): string {
+	const clean = collapse(text);
+	if (clean.length <= maxChars) return clean;
+	const budget = maxChars - 1;
+	let cut = clean.slice(0, budget);
 	const space = cut.lastIndexOf(" ");
-	return (space > NAME_MAX * 0.6 ? cut.slice(0, space) : cut).trim();
+	if (space >= Math.floor(budget * 0.5)) cut = cut.slice(0, space);
+	return `${cut.replace(/[,;:\s—-]+$/, "")}…`;
 }
 
-/** One line from a user message: wrappers and image markers removed, skill name as the last resort. */
-export function deriveName(text: string): string {
-	const stripped = text.replace(WRAPPED, "").replace(MARKER, "");
-	if (!stripped.trim()) {
-		const named = [...text.matchAll(NAMED)].map((m) => m[1]);
-		if (named.length) return shorten(named.join(" + "));
-	}
-	return shorten(stripped);
+/** Classify one user prompt into a name, a provisional skill name, a ping, or nothing. */
+export function deriveSessionName(rawPrompt: string): DerivedName {
+	if (!rawPrompt.trim()) return { kind: "empty" };
+
+	let wrapperName: string | null = null;
+	let text = rawPrompt.replace(BLOCK_WRAPPER, (_full, _tag: string, attrs: string) => {
+		const match = attrs?.match(NAME_ATTR);
+		if (!wrapperName && match) wrapperName = (match[1] ?? match[2] ?? "").trim().replace(/^\/+/, "") || null;
+		return "\n";
+	});
+	text = text.replace(IMAGE_MARKER, " ");
+
+	// A prompt that is only a pasted block still has a name inside the block.
+	let fenced: string | null = null;
+	text = text.replace(FENCED_BLOCK, (_full, _fence: string, inner: string) => {
+		if (!fenced && inner) fenced = inner.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? null;
+		return " ";
+	});
+
+	let prose = collapse(text);
+	const titled = prose.match(REPLY_OK_TITLE);
+	if (titled?.[1]?.trim()) prose = titled[1].trim();
+
+	if (prose && prose.length <= 30 && BARE_PING.test(prose)) return { kind: "ping" };
+	if (prose) return { kind: "final", name: truncateAtWord(prose) };
+	if (wrapperName) return { kind: "provisional", name: truncateAtWord(`/${wrapperName}`) };
+	if (fenced) return { kind: "final", name: truncateAtWord(fenced) };
+	return { kind: "empty" };
 }
-
-/**
- * The newest checkpoint objective for a project, or "" when the project has no journal yet.
- * `ithaca-context.py` names the project after the working directory's basename, so the mapping is
- * the same one the checkpoint used. A project can hold several work ids; the most recently written
- * journal is the live one.
- */
-let cache: { file: string; mtime: number; value: string } | undefined;
-
-export function latestObjective(cwd: string, root = WORK_ROOT): string {
-	const dir = join(root, basename(cwd));
-	let newest: { file: string; mtime: number } | undefined;
-	try {
-		for (const name of readdirSync(dir)) {
-			if (!name.endsWith(".jsonl")) continue;
-			const file = join(dir, name);
-			const { mtimeMs } = statSync(file);
-			if (!newest || mtimeMs > newest.mtime) newest = { file, mtime: mtimeMs };
-		}
-	} catch {
-		return "";
-	}
-	if (!newest) return "";
-	// Re-reading an unchanged journal every turn is pointless: the objective only moves at a
-	// checkpoint, which rewrites the file.
-	if (cache?.file === newest.file && cache.mtime === newest.mtime) return cache.value;
-	try {
-		const lines = readFileSync(newest.file, "utf8").trimEnd().split("\n");
-		const last = JSON.parse(lines[lines.length - 1]);
-		const objective = last?.payload?.objective;
-		const value = typeof objective === "string" ? shorten(objective) : "";
-		cache = { file: newest.file, mtime: newest.mtime, value };
-		return value;
-	} catch {
-		// A half-written or foreign file must not break naming: the derived name still applies.
-		return "";
-	}
-}
-
-const OWN_ENTRY = "ithaca-session-name";
 
 export default function (pi: ExtensionAPI) {
-	// Names this extension wrote. Anything else in the picker came from the user and is left alone.
-	// Rebuilt from the branch on every call, because ownership has to survive a /resume in a new
-	// process: without it an auto-named session looks user-named and stops following its checkpoint.
-	const owned = new Set<string>();
+	let locked = false;
+	let provisional: string | null = null;
 
-	const name = (ctx: { cwd: string; sessionManager: { getBranch(): any[] } }) => {
-		const entries = ctx.sessionManager.getBranch();
-		for (const entry of entries) {
-			if (entry?.type === "custom" && entry.customType === OWN_ENTRY && typeof entry.data?.name === "string") owned.add(entry.data.name);
-		}
-		const current = pi.getSessionName();
-		// /name, --name or ctrl+r: hands off for the rest of the session.
-		if (current && !owned.has(current)) return;
-		const apply = (next: string) => {
-			pi.setSessionName(next);
-			owned.add(next);
-			pi.appendEntry(OWN_ENTRY, { name: next });
-		};
-		const objective = latestObjective(ctx.cwd);
-		if (objective && objective !== current) {
-			apply(objective);
-			return;
-		}
-		// An objective outranks the derived name, so only derive while the session is still unnamed.
-		if (current) return;
-		const derived = deriveName(firstUserText(entries));
-		if (!derived) return;
-		apply(derived);
+	const reset = () => {
+		provisional = null;
+		locked = Boolean(pi.getSessionName()?.trim());
 	};
 
-	// `turn_start` and `before_agent_start` fire *before* the first user message is committed to the
-	// branch — measured 2026-10-27, entries stayed at 2 through turn_start — so a fresh session has
-	// nothing to derive from there. `context` has the message; `session_start` covers a resumed one
-	// (its first message predates the process); `turn_end` picks up a checkpoint written this turn.
-	for (const event of ["session_start", "context", "turn_end"] as const) {
-		pi.on(event, async (_event: any, ctx: any) => name(ctx));
-	}
+	pi.on("session_start", async () => reset());
+
+	// A name that is not the provisional one we wrote came from /name, --name, ctrl+r or a previous
+	// process: lock, and never look at this session again. A cleared name unlocks.
+	pi.on("session_info_changed", async (event) => {
+		if (event.name === undefined) {
+			locked = false;
+			provisional = null;
+			return;
+		}
+		if (event.name !== provisional) locked = true;
+	});
+
+	// `before_agent_start` carries the raw user prompt, so this runs identically in the TUI and in
+	// `pi -p`, with no branch walk and no dependence on when the message is committed.
+	pi.on("before_agent_start", async (event) => {
+		if (locked) return;
+		if (event.messageType !== "user" || typeof event.prompt !== "string") return;
+
+		const existing = pi.getSessionName()?.trim() ?? "";
+		if (existing && existing !== provisional) {
+			locked = true;
+			provisional = null;
+			return;
+		}
+
+		const derived = deriveSessionName(event.prompt);
+		if (derived.kind === "final") {
+			pi.setSessionName(derived.name);
+			locked = true;
+			provisional = null;
+		} else if (derived.kind === "provisional" && !provisional) {
+			// Assign before the call: the session_info_changed it triggers must match, or it reads as
+			// an external rename and locks the provisional name in forever.
+			provisional = derived.name;
+			pi.setSessionName(derived.name);
+		}
+	});
 }

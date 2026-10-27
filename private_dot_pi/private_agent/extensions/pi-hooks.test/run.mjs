@@ -193,74 +193,87 @@ await nudge.turn_end({}, usageCtx(90, false));
 check("nudge: headless modes get no notification", nudgeNotices.length === before, JSON.stringify(nudgeNotices));
 
 // -------------------------------------------------------- session-name.ts
-// The picker shows the name instead of the first message, so a skill-opened session currently shows
-// its whole skill body. Verify the derivation against the shapes a real session starts with.
-// The journal root is read at module load, so point it at a scratch tree before importing.
-process.env.ITHACA_CONTEXT_ROOT = join(scratch, "work");
+// Named once, from the first prompt that carries real words. Three behaviours are load-bearing and
+// each has a row below: a handshake names nothing (so probes stay unnamed and multi-turn runs are
+// named by their real request), a skill-only prompt is provisional (so /recap can still be replaced),
+// and any name the extension did not write locks the session (so /name and ctrl+r win forever).
 const naming = await import(`${here}session-name.ts`);
-check("name: strip the skill wrapper, keep the request",
-	naming.deriveName('<skill name="recap" location="/home/ta/.agents/skills/recap/SKILL.md">\nlong body\n</skill>\n\ncontinue the ithaca batch') === "continue the ithaca batch");
-check("name: first non-empty line only", naming.deriveName("\n\n  fix   the epoch   migration\nsecond line") === "fix the epoch migration");
-check("name: no trailing punctuation", naming.deriveName("what happened to the backup?") === "what happened to the backup");
-check("name: a long line is cut at a word boundary", (() => {
-	const n = naming.deriveName("word ".repeat(40));
-	return n.length <= 60 && n.split(" ").every((w) => w === "word");
-})());
-check("name: image markers do not become the name", naming.deriveName("[Image #1 800x600]\nrename the hunch output") === "rename the hunch output");
-check("name: an empty prompt yields no name", naming.deriveName("   ") === "");
-// A slash command whose whole message is the skill body: the row must be the skill, not its text.
-check("name: a skill-only message is named after the skill",
-	naming.deriveName('<skill name="recap" location="/home/ta/.agents/skills/recap/SKILL.md">\nbody\n</skill>') === "recap");
-check("name: two stacked skills are both named",
-	naming.deriveName('<skill name="recap">a</skill>\n<skill name="context">b</skill>') === "recap + context");
 
-// A checkpoint objective outranks the first message: a session drifts across topics and compacts,
-// so the sentence a human wrote at the checkpoint is the only summary that still fits at the end.
-const workRoot = join(scratch, "work");
-const projectDir = join(workRoot, "demo-project");
-mkdirSync(projectDir, { recursive: true });
-const journal = join(projectDir, "w-1.jsonl");
-const writeJournal = (objective, rev = 1) =>
-	writeFileSync(journal, `${JSON.stringify({ rev, kind: "checkpoint", payload: { objective } })}\n`);
-
-const branch = [{ type: "message", message: { role: "user", content: '<skill name="recap">body</skill>\ncheck the switch matrix' } }];
-async function namingRun({ existing, cwd = projectDir, events = ["session_start"], ownedByUs = false }) {
-	let current = existing;
-	const set = [];
-	const appended = [];
-	// A resumed session carries the ownership marker this extension appended last time; without it a
-	// name looks user-set and the row stops following the checkpoint.
-	const entries = ownedByUs ? [...branch, { type: "custom", customType: "ithaca-session-name", data: { name: existing } }] : branch;
-	const mod = await import(`${here}session-name.ts?case=${Math.random()}`);
+/** A fake pi whose setSessionName emits the session_info_changed pi would emit. */
+function namingHarness(name) {
 	const handlers = {};
-	mod.default({
+	let current = name;
+	const set = [];
+	const pi = {
 		on: (ev, fn) => (handlers[ev] = fn),
 		getSessionName: () => current,
-		setSessionName: (n) => { set.push(n); current = n; },
-		appendEntry: (customType, data) => appended.push([customType, data]),
-	});
-	for (const ev of events) await handlers[ev]({}, { cwd, sessionManager: { getBranch: () => entries } });
-	return { set, current, appended };
+		setSessionName: (next) => {
+			set.push(next);
+			current = next;
+			handlers.session_info_changed?.({ name: next }, {});
+		},
+	};
+	naming.default(pi);
+	const turn = async (prompt, messageType = "user") => {
+		await handlers.before_agent_start({ messageType, prompt }, {});
+		return current;
+	};
+	return { turn, handlers, set, name: () => current };
 }
 
-writeJournal("Batch 2 of the Sol review, closed");
-let r = await namingRun({ existing: undefined });
-check("name: a checkpoint objective names the session", r.current === "Batch 2 of the Sol review, closed", JSON.stringify(r.set));
-check("name: the name we wrote is marked as ours in the branch", r.appended[0]?.[0] === "ithaca-session-name" && r.appended[0]?.[1]?.name === "Batch 2 of the Sol review, closed", JSON.stringify(r.appended));
+let h = namingHarness(undefined);
+await h.handlers.session_start({}, {});
+await h.turn("Reply with exactly: OK");
+check("name: a handshake names nothing", h.name() === undefined, JSON.stringify(h.set));
+await h.turn("Fix the epoch migration in chronicler");
+check("name: a multi-turn run is named by its real request", h.name() === "Fix the epoch migration in chronicler", JSON.stringify(h.set));
 
-// The user's own name wins, including one typed after the session was named for us.
-r = await namingRun({ existing: "my own name" });
-check("name: an objective never overwrites /name", r.set.length === 0, JSON.stringify(r.set));
+h = namingHarness(undefined);
+await h.handlers.session_start({}, {});
+await h.turn("Reply ok");
+await h.turn("Reply with exactly: ok");
+check("name: repeated handshakes still name nothing", h.set.length === 0, JSON.stringify(h.set));
 
-// Later checkpoints on the same journal update the row.
-r = await namingRun({ existing: undefined });
-writeJournal("Deployment refactor: harness files", 2);
-r = await namingRun({ existing: r.current, events: ["turn_end"], ownedByUs: true });
-check("name: the newest objective updates a name this extension set", r.current === "Deployment refactor: harness files", JSON.stringify(r.set));
+h = namingHarness(undefined);
+await h.handlers.session_start({}, {});
+await h.turn('<skill name="recap" location="/home/ta/.agents/skills/recap/SKILL.md">\nbody\n</skill>');
+check("name: a skill-only prompt is provisional", h.name() === "/recap", JSON.stringify(h.set));
+await h.turn("now check the switch matrix");
+check("name: real prose replaces the provisional name", h.name() === "now check the switch matrix", JSON.stringify(h.set));
+await h.turn("something else entirely");
+check("name: once final, later turns never rename", h.set.length === 2, JSON.stringify(h.set));
 
-rmSync(projectDir, { recursive: true, force: true });
-r = await namingRun({ existing: undefined, cwd: join(scratch, "no-journal-here") });
-check("name: no journal falls back to the first message", r.current === "check the switch matrix", JSON.stringify(r.set));
+h = namingHarness(undefined);
+await h.handlers.session_start({}, {});
+await h.turn('<skill name="recap">body</skill>');
+// The harness's own name stays "/recap": what matters is that the extension saw an external name and
+// stopped writing, which is exactly what the real pi would report through session_info_changed.
+h.handlers.session_info_changed({ name: "my own name" }, {});
+await h.turn("now check the switch matrix");
+check("name: /name between turns locks the session", h.set.length === 1, JSON.stringify(h.set));
+
+h = namingHarness(undefined);
+await h.turn("Continue the X1C setup. Read ~/x1c-setup-handoff.md first — batch 2: close W02 and W03");
+check("name: a handoff preamble keeps its task at 110 chars",
+	(h.name() ?? "").endsWith("close W02 and W03") && (h.name() ?? "").length <= 110, h.name());
+
+h = namingHarness("named by --name");
+await h.handlers.session_start({}, {});
+await h.turn("this must not rename it");
+check("name: a resumed session is already locked", h.name() === "named by --name" && h.set.length === 0, JSON.stringify(h.set));
+
+h = namingHarness(undefined);
+await h.turn("a custom-message run", "custom");
+check("name: only user prompts are named from", h.set.length === 0, JSON.stringify(h.set));
+
+check("name: deriveName keeps a title after a handshake",
+	naming.deriveSessionName("Reply ok. epoch migration review").name === "epoch migration review");
+check("name: deriveName names a pasted block from inside it",
+	naming.deriveSessionName("```\nError: panic at epoch.rs:42\n```").name === "Error: panic at epoch.rs:42");
+check("name: deriveName folds newlines before the cut",
+	naming.deriveSessionName("Read PLAN.md first.\nThen fix the epoch migration").name === "Read PLAN.md first. Then fix the epoch migration");
+check("name: deriveName leaves inline markup alone",
+	naming.deriveSessionName("why does `<skill name=\"x\">` strip?").name === 'why does `<skill name="x">` strip?');
 
 process.env.PATH = realPath;
 rmSync(scratch, { recursive: true, force: true });
