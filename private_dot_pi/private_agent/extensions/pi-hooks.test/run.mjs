@@ -195,6 +195,8 @@ check("nudge: headless modes get no notification", nudgeNotices.length === befor
 // -------------------------------------------------------- session-name.ts
 // The picker shows the name instead of the first message, so a skill-opened session currently shows
 // its whole skill body. Verify the derivation against the shapes a real session starts with.
+// The journal root is read at module load, so point it at a scratch tree before importing.
+process.env.ITHACA_CONTEXT_ROOT = join(scratch, "work");
 const naming = await import(`${here}session-name.ts`);
 check("name: strip the skill wrapper, keep the request",
 	naming.deriveName('<skill name="recap" location="/home/ta/.agents/skills/recap/SKILL.md">\nlong body\n</skill>\n\ncontinue the ithaca batch') === "continue the ithaca batch");
@@ -212,26 +214,53 @@ check("name: a skill-only message is named after the skill",
 check("name: two stacked skills are both named",
 	naming.deriveName('<skill name="recap">a</skill>\n<skill name="context">b</skill>') === "recap + context");
 
-let setNames = [];
-let currentName;
-const nameCases = [];
-for (const existing of [undefined, "set by /name"]) {
-	currentName = existing;
-	setNames = [];
-	nameCases.push({ existing, sessionManager: { getBranch: () => [
-		{ type: "message", message: { role: "user", content: '<skill name="recap">body</skill>\ncheck the switch matrix' } },
-	] } });
+// A checkpoint objective outranks the first message: a session drifts across topics and compacts,
+// so the sentence a human wrote at the checkpoint is the only summary that still fits at the end.
+const workRoot = join(scratch, "work");
+const projectDir = join(workRoot, "demo-project");
+mkdirSync(projectDir, { recursive: true });
+const journal = join(projectDir, "w-1.jsonl");
+const writeJournal = (objective, rev = 1) =>
+	writeFileSync(journal, `${JSON.stringify({ rev, kind: "checkpoint", payload: { objective } })}\n`);
+
+const branch = [{ type: "message", message: { role: "user", content: '<skill name="recap">body</skill>\ncheck the switch matrix' } }];
+async function namingRun({ existing, cwd = projectDir, events = ["session_start"], ownedByUs = false }) {
+	let current = existing;
+	const set = [];
+	const appended = [];
+	// A resumed session carries the ownership marker this extension appended last time; without it a
+	// name looks user-set and the row stops following the checkpoint.
+	const entries = ownedByUs ? [...branch, { type: "custom", customType: "ithaca-session-name", data: { name: existing } }] : branch;
+	const mod = await import(`${here}session-name.ts?case=${Math.random()}`);
+	const handlers = {};
+	mod.default({
+		on: (ev, fn) => (handlers[ev] = fn),
+		getSessionName: () => current,
+		setSessionName: (n) => { set.push(n); current = n; },
+		appendEntry: (customType, data) => appended.push([customType, data]),
+	});
+	for (const ev of events) await handlers[ev]({}, { cwd, sessionManager: { getBranch: () => entries } });
+	return { set, current, appended };
 }
-for (const c of nameCases) {
-	currentName = c.existing;
-	setNames = [];
-	const mod = await import(`${here}session-name.ts?case=${c.existing ?? "none"}`);
-	const h = {};
-	mod.default({ on: (ev, fn) => (h[ev] = fn), getSessionName: () => currentName, setSessionName: (n) => { setNames.push(n); currentName = n; } });
-	await h.session_start({}, { sessionManager: c.sessionManager });
-	if (c.existing === undefined) check("name: a fresh session gets a derived name", setNames[0] === "check the switch matrix", JSON.stringify(setNames));
-	else check("name: /name is never overwritten", setNames.length === 0, JSON.stringify(setNames));
-}
+
+writeJournal("Batch 2 of the Sol review, closed");
+let r = await namingRun({ existing: undefined });
+check("name: a checkpoint objective names the session", r.current === "Batch 2 of the Sol review, closed", JSON.stringify(r.set));
+check("name: the name we wrote is marked as ours in the branch", r.appended[0]?.[0] === "ithaca-session-name" && r.appended[0]?.[1]?.name === "Batch 2 of the Sol review, closed", JSON.stringify(r.appended));
+
+// The user's own name wins, including one typed after the session was named for us.
+r = await namingRun({ existing: "my own name" });
+check("name: an objective never overwrites /name", r.set.length === 0, JSON.stringify(r.set));
+
+// Later checkpoints on the same journal update the row.
+r = await namingRun({ existing: undefined });
+writeJournal("Deployment refactor: harness files", 2);
+r = await namingRun({ existing: r.current, events: ["turn_end"], ownedByUs: true });
+check("name: the newest objective updates a name this extension set", r.current === "Deployment refactor: harness files", JSON.stringify(r.set));
+
+rmSync(projectDir, { recursive: true, force: true });
+r = await namingRun({ existing: undefined, cwd: join(scratch, "no-journal-here") });
+check("name: no journal falls back to the first message", r.current === "check the switch matrix", JSON.stringify(r.set));
 
 process.env.PATH = realPath;
 rmSync(scratch, { recursive: true, force: true });
