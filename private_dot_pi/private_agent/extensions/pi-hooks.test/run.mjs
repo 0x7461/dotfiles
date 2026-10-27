@@ -1,6 +1,8 @@
-// Tests for the two extensions that act as pi's hooks, since pi has no hook runner of its own:
-// store-context.ts (the store prompt, its harness filter and its kill-switch) and notify.ts (the
-// desktop notification, its run-length floor and its bounds). Exits non-zero on a failure.
+// Tests for the extensions that stand in for pi's hooks, since pi has no hook runner of its own:
+// store-context.ts (the store prompt and its kill-switch), notify.ts (the desktop notification, its
+// run-length floor and its bounds), context-nudge.ts (the pre-compaction levels pi never warns about)
+// and session-name.ts (the /resume row, which shows the name instead of the first message). Exits
+// non-zero on a failure.
 //
 //     node ~/.pi/agent/extensions/pi-hooks.test/run.mjs
 //
@@ -147,6 +149,89 @@ await notifyHandlers.agent_settled({}, notifyCtx());
 Date.now = realNow;
 await new Promise((r) => setTimeout(r, 6_000));
 check("notify: a run under the floor stays silent", notices.length === 0, JSON.stringify(notices));
+
+// ------------------------------------------------------- context-nudge.ts
+// The store's continuation work needs the pre-compaction warning pi does not give. Percent comes
+// from the model's window, so the cases below vary the window, not the token count.
+const nudge = handlersFor(await import(`${here}context-nudge.ts`));
+let nudgeNotices = [];
+const usageCtx = (percent, hasUI = true) => ({
+	hasUI,
+	getContextUsage: () => ({ tokens: percent === null ? null : percent * 2000, contextWindow: 200_000, percent }),
+	ui: { notify: (msg, level) => nudgeNotices.push([msg, level]) },
+});
+
+nudgeNotices = [];
+for (const percent of [10, 24.9, 25.1]) await nudge.turn_end({}, usageCtx(percent));
+check("nudge: fires once at 25, not below it", nudgeNotices.length === 1 && nudgeNotices[0][0].startsWith("context 25%"),
+	JSON.stringify(nudgeNotices));
+
+nudgeNotices = [];
+for (const percent of [51, 60, 74]) await nudge.turn_end({}, usageCtx(percent));
+check("nudge: 50 level fires once though it stays crossed", nudgeNotices.length === 1 && nudgeNotices[0][0].startsWith("context 51%"),
+	JSON.stringify(nudgeNotices));
+
+nudgeNotices = [];
+await nudge.turn_end({}, usageCtx(76));
+await nudge.turn_end({}, usageCtx(80));
+check("nudge: 75 is a warning and fires once", nudgeNotices.length === 1 && nudgeNotices[0][1] === "warning",
+	JSON.stringify(nudgeNotices));
+
+// The null percent that immediately follows a compaction must not be read as 0% or as a fresh climb.
+nudgeNotices = [];
+await nudge.turn_end({}, usageCtx(null));
+check("nudge: a null percent says nothing", nudgeNotices.length === 0, JSON.stringify(nudgeNotices));
+
+// After a compaction the levels re-arm, so a long session is warned again on its second climb.
+await nudge.session_compact({}, usageCtx(null));
+await nudge.turn_end({}, usageCtx(26));
+check("nudge: levels re-arm after a compaction", nudgeNotices.length === 1, JSON.stringify(nudgeNotices));
+
+nudgeNotices = [];
+const before = nudgeNotices.length;
+await nudge.turn_end({}, usageCtx(90, false));
+check("nudge: headless modes get no notification", nudgeNotices.length === before, JSON.stringify(nudgeNotices));
+
+// -------------------------------------------------------- session-name.ts
+// The picker shows the name instead of the first message, so a skill-opened session currently shows
+// its whole skill body. Verify the derivation against the shapes a real session starts with.
+const naming = await import(`${here}session-name.ts`);
+check("name: strip the skill wrapper, keep the request",
+	naming.deriveName('<skill name="recap" location="/home/ta/.agents/skills/recap/SKILL.md">\nlong body\n</skill>\n\ncontinue the ithaca batch') === "continue the ithaca batch");
+check("name: first non-empty line only", naming.deriveName("\n\n  fix   the epoch   migration\nsecond line") === "fix the epoch migration");
+check("name: no trailing punctuation", naming.deriveName("what happened to the backup?") === "what happened to the backup");
+check("name: a long line is cut at a word boundary", (() => {
+	const n = naming.deriveName("word ".repeat(40));
+	return n.length <= 60 && n.split(" ").every((w) => w === "word");
+})());
+check("name: image markers do not become the name", naming.deriveName("[Image #1 800x600]\nrename the hunch output") === "rename the hunch output");
+check("name: an empty prompt yields no name", naming.deriveName("   ") === "");
+// A slash command whose whole message is the skill body: the row must be the skill, not its text.
+check("name: a skill-only message is named after the skill",
+	naming.deriveName('<skill name="recap" location="/home/ta/.agents/skills/recap/SKILL.md">\nbody\n</skill>') === "recap");
+check("name: two stacked skills are both named",
+	naming.deriveName('<skill name="recap">a</skill>\n<skill name="context">b</skill>') === "recap + context");
+
+let setNames = [];
+let currentName;
+const nameCases = [];
+for (const existing of [undefined, "set by /name"]) {
+	currentName = existing;
+	setNames = [];
+	nameCases.push({ existing, sessionManager: { getBranch: () => [
+		{ type: "message", message: { role: "user", content: '<skill name="recap">body</skill>\ncheck the switch matrix' } },
+	] } });
+}
+for (const c of nameCases) {
+	currentName = c.existing;
+	setNames = [];
+	const mod = await import(`${here}session-name.ts?case=${c.existing ?? "none"}`);
+	const h = {};
+	mod.default({ on: (ev, fn) => (h[ev] = fn), getSessionName: () => currentName, setSessionName: (n) => { setNames.push(n); currentName = n; } });
+	await h.session_start({}, { sessionManager: c.sessionManager });
+	if (c.existing === undefined) check("name: a fresh session gets a derived name", setNames[0] === "check the switch matrix", JSON.stringify(setNames));
+	else check("name: /name is never overwritten", setNames.length === 0, JSON.stringify(setNames));
+}
 
 process.env.PATH = realPath;
 rmSync(scratch, { recursive: true, force: true });
