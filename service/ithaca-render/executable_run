@@ -1,0 +1,4 @@
+#!/bin/sh
+# Keeps ~/.codex/AGENTS.md in step with the store. A launch wrapper was the old mechanism and it
+# lost: IDE integrations, subshells and PATH order bypass it, and the file then stays stale silently.
+exec python3 /home/ta/.agents/scripts/render-on-change.py
