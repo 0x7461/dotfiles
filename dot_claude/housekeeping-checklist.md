@@ -3,9 +3,9 @@
 Trigger-based checklist for keeping docs, configs, and services in sync.
 Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
-**Last reviewed:** 2026-10-10 (pi-cutover pass: a `find` over `~/.claude` is now blocked by `private-guard`, so the CC-side symlinks are checked by name instead)
+**Last reviewed:** 2026-10-29 (ithaca-watch section retired after its month; a `find` over `~/.claude` is now blocked by `private-guard`, so the CC-side symlinks are checked by name instead)
 **Last CC cleanup:** 2026-10-25 (caretaker #18: store-check 138 files / 0 problems, always-loaded 39,774 chars, memcheck 94 / 0 problems, harness settings have no CC counterpart to review on this machine)
-**Last store cleanup:** 2026-10-29 (pi `/housekeeping`, reliability pass: store-check 144 files / 0 problems, memcheck 98 / 0, always-loaded 55,358 chars ≈ 13,839 tokens, ithaca PLAN 20.9k, caretaker PLAN 21.3k, 6 store suites + 101 caretaker tests + 63 pi-extension cases green; ithaca and dotfiles both pushed, `caretaker-store` daily lane live, restore drill passing; `.theme/*` still shows MM drift from a theme regeneration, untouched)
+**Last store cleanup:** 2026-10-29 (pi `/housekeeping`, self-host dig + backlog pass: store-check 146 files / 0 problems, memcheck 98 / 0, always-loaded 61,061 chars ≈ 15,265 tokens, ithaca PLAN 20.9k, caretaker PLAN 21.3k, 6 store suites + 101 caretaker tests + 63 pi-extension cases green; ithaca and dotfiles both pushed, `caretaker-store` daily lane live, restore drill passing; `.theme/*` still shows MM drift from a theme regeneration, untouched)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[caretaker]] (`~/projects/caretaker/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
@@ -121,35 +121,6 @@ Run these in the project dir. Each is a quick `Bash` call; skip silently if not 
   the stale lock is the *residue* of the other one. Skipped twice now — 2026-08-29 and 2026-09-18 —
   both times by reading only the tail of the log, which starts below the Node stack trace. Reading a
   log tail is not reading the log.
-
-## ithaca watch (every housekeeping — expires 2026-10-29)
-
-The agent store went live 2026-09-29 (`~/projects/ithaca/store/`, exposed as `~/.agents`). Run
-this every time for a month to catch breakage early. Record anything found as a fix item in
-ithaca's PLAN Backlog. **On or after 2026-10-29:** summarise the month in ithaca HISTORY, then
-delete this section.
-
-- [ ] **Store committed and pushed.** Memory now lives in ithaca, so /housekeeping is its commit
-  path: `git -C ~/projects/ithaca status -sb` — commit memory/rule edits from this session,
-  then `git push` (the private remote is the only off-site copy).
-- [ ] **Store self-check** — `python3 ~/.agents/scripts/store-check.py`. Exit 0 = clean, 1 names every
-  finding: a link or `~/` path that does not resolve, an adapter symlink off the store, a harness tag
-  that leaks into a harness which will not drop it, a composer that fell behind. It also folds in
-  `memcheck.py` (name == stem, description/type, `[[links]]` resolve, MEMORY.md matches disk both
-  ways) and prints the injected size. Fix what it reports before finishing — all are mechanical.
-  `chezmoi status` clean for `.claude` / `.agents` paths.
-- [ ] **CC saved a memory this session?** Confirm it landed in `store/memory/` (it shows in
-  ithaca's `git status`). The first confirmed save clears AGENTS.md "Untested: CC saving a
-  memory through the symlinked folder".
-- [ ] **pi used this session?** Note anything pi missed that CC follows (a rule, the output
-  style, a memory). pi reads the store once per session, so edits apply next session. ⚠ `private-guard`
-  reads the *command text*, so a command that names a secret file is blocked whole and the rest of that
-  call's output with it — put one in its own call, and don't describe a secret file in a commit message.
-- [ ] **After 2026-10-05:** `git -C ~/projects/ithaca log --oneline --grep 'Weekly snapshot' -1`
-  shows a W41+ commit — the ithaca-snapshot service's commit path works inside ithaca. A log line
-  `memory-snapshot: <week> — no changes` (`~/service/ithaca-snapshot/log/main/current`) means it ran
-  and /housekeeping had already committed memory; the commit path stays unproven. W41 did exactly
-  that (2026-10-05). The W40 commit predates the store, so it proves nothing.
 
 ## Session end (replaces save-learnings)
 
