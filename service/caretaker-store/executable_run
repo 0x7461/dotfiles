@@ -1,0 +1,17 @@
+#!/bin/sh
+exec 2>&1
+# 75 = deferred (the job never started), never 1 — see wait-net.
+/home/ta/.local/bin/wait-net 120 || exit 75
+export PATH="/home/ta/.local/bin:$PATH"
+cd /home/ta/projects/caretaker
+# The ithaca store is what every harness reads, so a fault in it is silent until an agent trips over
+# it (the 2026-10-28 mode-bit loss broke a live skill with exit 126). The weekly scan reports
+# findings; this is the daily lane and it *alerts* — once per failure episode, plus a recovery
+# notice, so "no alert" never means "maybe still broken".
+#
+# -t + -s 1d: a 06:30 slot missed while the laptop was off fires on next start. The job touches the
+# timefile before running, so a failed run waits for the next slot rather than looping.
+tf=/home/ta/.local/state/snooze/caretaker-store
+mkdir -p "${tf%/*}"
+exec snooze -t "$tf" -s 1d -H6 -M30 \
+  sh -c 'touch "$1" && exec uv run python -m caretaker store' sh "$tf" 2>&1
