@@ -5,7 +5,7 @@ Referenced by the `/housekeeping` skill. Self-reviews every 30 days.
 
 **Last reviewed:** 2026-10-10 (pi-cutover pass: a `find` over `~/.claude` is now blocked by `private-guard`, so the CC-side symlinks are checked by name instead)
 **Last CC cleanup:** 2026-10-25 (caretaker #18: store-check 138 files / 0 problems, always-loaded 39,774 chars, memcheck 94 / 0 problems, harness settings have no CC counterpart to review on this machine)
-**Last store cleanup:** 2026-10-28 (pi `/housekeeping`, after the Codex review: store-check 143 files / 0 problems, memcheck 96 / 0, always-loaded 55,241 chars ≈ 13,810 tokens, PLAN 24.0k with 22 items, 5 suites green (40+11+7+6+12+7 = 83 checks), all repos clean; `.theme/*` shows MM drift from a theme regeneration, untouched)
+**Last store cleanup:** 2026-10-29 (pi `/housekeeping`, reliability pass: store-check 144 files / 0 problems, memcheck 98 / 0, always-loaded 55,358 chars ≈ 13,839 tokens, ithaca PLAN 20.9k, caretaker PLAN 21.3k, 6 store suites + 101 caretaker tests + 63 pi-extension cases green; ithaca and dotfiles both pushed, `caretaker-store` daily lane live, restore drill passing; `.theme/*` still shows MM drift from a theme regeneration, untouched)
 
 > **Scope:** in-session, transcript-driven hygiene only. Portfolio-wide periodic scans (drift detection, repo staleness, runit health, monthly CC cleanup) moved to [[caretaker]] (`~/projects/caretaker/PLAN.md`) — runs out-of-session via runit cron + Telegram digest via nagger lane.
 
