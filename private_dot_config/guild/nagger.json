@@ -1,0 +1,26 @@
+{
+  "reset_weekday": 0,
+  "reset_hour": 11,
+  "reset_tz_offset": 7,
+  "quota_enabled": false,
+  "reminders": [
+    {
+      "id": "ig-liked",
+      "message": "Export IG likes + refresh cookies: `archiver instagram backup --liked`",
+      "every_days": 91,
+      "anchor": "2026-06-08"
+    },
+    {
+      "id": "msgr-e2e",
+      "message": "Manual Messenger E2E chat export (on-device only, cannot be automated)",
+      "every_days": 91,
+      "anchor": "2026-06-08"
+    },
+    {
+      "id": "pi-smoke",
+      "message": "Run the pi smoke test — a real task on the current default model",
+      "every_days": 365,
+      "anchor": "2026-10-01"
+    }
+  ]
+}

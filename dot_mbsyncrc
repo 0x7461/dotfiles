@@ -21,7 +21,15 @@ Far :gmail-remote:
 Near :gmail-local:
 # Skip [Gmail]/All Mail — it holds a *copy* of every message, so pulling it
 # doubles the archive. Also skip the virtual Important/Starred labels.
-Patterns * !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred"
+#
+# Three labels were retired on Gmail around 2026-10-28 and their mail moved into other labels:
+# Personal/Tax, Works/DSVN and Works/FSOFT. Their local Maildirs are the only remaining copy of the
+# *labels*, but not of the mail — sampled Message-IDs from all three are present in All Mail, so the
+# messages still exist server-side under their new labels (which `*` picks up). Gmail answers SELECT
+# with `[NONEXISTENT]` for them, which made every run fail with "far side box ... cannot be opened
+# anymore" (exit 1, four runs). Excluded rather than deleted: Expunge None means the 62 local
+# messages stay readable as an archive, and nothing is ever removed server-side.
+Patterns * !"[Gmail]/All Mail" !"[Gmail]/Important" !"[Gmail]/Starred" !"Personal/Tax" !"Works/DSVN" !"Works/FSOFT"
 Create Near
 Expunge None          # archive-only: never delete anything server-side
 SyncState *
