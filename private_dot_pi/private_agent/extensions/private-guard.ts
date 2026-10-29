@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, globSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -12,8 +12,12 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 // context. The remaining private roots (PII) are blocked only while the session's model is not
 // private, so PII stays off direct DeepSeek and any other provider that trains on or retains inputs.
 // Fails closed: an unknown provider or model, or no model at all, counts as not private. A guardrail
-// against accidents, not a wall: a glob, a path built in a shell variable, or a script can still
-// reach a private file indirectly.
+// against accidents, not a wall. What it does not cover, declared here rather than implied:
+//   - a path built in a shell variable or read from a file list,
+//   - a script that opens the file itself,
+//   - an MCP tool, and any tool outside read/write/edit/ls/grep/find/bash (see rootForCall's default),
+//   - a glob is expanded (2026-10-29), so the common search spelling is covered; a pattern that matches
+//     more than GLOB_LIMIT paths is judged by its static prefix instead of its matches.
 const HOME = homedir();
 
 // The private tier as a policy with reasons, not a bare set: the definition and the enforcement
@@ -411,31 +415,63 @@ function grepUnfiltered(command: string): boolean {
 // context. The other private roots are personal data, which a local model may see.
 const SECRET_ROOTS = [
 	".claude/.credentials.json",
+	".codex/auth.json",
 	".config/aria2/aria2.conf",
+	".config/archivist",
 	".config/chezmoi/chezmoi.toml",
 	".config/deepseek",
 	".config/gallery-dl/config.json",
 	".config/google-chrome",
+	// Firefox's profile lives under XDG now; the classic ~/.mozilla is kept for an older layout and
+	// sits on ABSENT_ON_PURPOSE, or the staleness check would fail on a root that guards nothing.
+	".config/mozilla",
+	// The IMAP app password, and the one secret the 2026-10-06 sweep did not know about.
+	".config/mbsync/gmail.pass",
 	".gemini/antigravity-cli/antigravity-oauth-token",
 	".gnupg",
 	".local/share/TelegramDesktop",
 	".local/share/qutebrowser",
 	".local/share/smuggler/sessions",
+	// nvim mirrors every file it edits into its undo dir, so the dir is secret by construction — it
+	// holds a copy of gmail.pass and of every .env under a `%home%...` name no name rule matches.
+	".local/state/nvim/undo",
 	".mozilla",
 	".pi/agent/auth.json",
 	".ssh",
+	"projects/bouncer/amo-creds",
 ].map((p) => join(HOME, p));
+
+// Roots that are allowed to be absent on this machine. Every other root must exist, or the suite
+// fails: a root that has moved (Firefox did) silently guards nothing, and that is how this list fell
+// behind the machine in the first place.
+const ABSENT_ON_PURPOSE = new Map([
+	[join(HOME, ".mozilla"), "the classic Firefox layout; this machine uses ~/.config/mozilla"],
+	[join(HOME, ".config/deepseek"), "the DeepSeek account closed 2026-10-19; kept so a re-created key is caught"],
+	[join(HOME, ".gnupg"), "no keys on this machine; kept for one that has them"],
+	[join(HOME, ".local/share/qutebrowser"), "qutebrowser was not installed on the X1C; kept for the spelling"],
+]);
 
 const PRIVATE_ROOTS = [
 	".claude/pii-aliases.local.md",
+	// A transcript is a copy of whatever that session read, so it is PII-class once any session was
+	// allowed to read a PII root. These are the stores the four harnesses and chronicler write.
+	".claude/projects",
+	".local/share/chronicler",
+	".local/state/pi-worker",
+	".pi/agent/sessions",
 	"archive",
 	"mail",
 	"obsidian-vault/finance",
 	"obsidian-vault/journal",
 	"obsidian-vault/personal",
-	".config/archivist",
 	".local/share/archivist",
+	".codex/sessions",
+	".gemini/antigravity-cli/conversations",
 ].map((p) => join(HOME, p));
+
+// Every root must exist, or be listed as absent on purpose: a root that has moved (Firefox did, to
+// ~/.config/mozilla) otherwise guards nothing and no test notices. Exported for the suite.
+export const ROOT_LISTS = { SECRET_ROOTS, PRIVATE_ROOTS, ABSENT_ON_PURPOSE };
 
 // Resolve the deepest existing ancestor when the leaf is absent, which is normal for write, so a
 // symlink into a private root still counts. realpathSync throws only when a component is missing.
@@ -515,7 +551,7 @@ const PRIVATE_PATTERNS = rootPatterns(PRIVATE_ROOTS);
 const SECRET_LEAVES = SECRET_PATTERNS.map((p) => p.root);
 const PRIVATE_LEAVES = PRIVATE_PATTERNS.map((p) => p.root);
 
-const RECURSIVE_VERB = /(^|[\s|;&(])(rg|find|tar|rsync|du|tree)(\s|$)/;
+const RECURSIVE_VERB = /(^|[\s|;&(])(rg|fd|find|tar|rsync|du|tree)(\s|$)/;
 const RECURSIVE_FLAG = /(^|[\s|;&(])(grep|cp|mv)\s+[^|;&]*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(\s|$)/;
 
 function recursiveCommand(command: string): boolean {
@@ -552,14 +588,50 @@ function relativeFromCwd(text: string, cwd: string, root: string): boolean {
 	return new RegExp(`${BEFORE}${rel}/|${BEFORE}\\./${rel}${ROOT_AHEAD}`).test(quotedHeads(text));
 }
 
-// A path-shaped token (one holding a "/" or starting with ".") that resolves into the root from the
-// working directory. This catches what the spelled forms miss: a relative file root
-// (".pi/agent/auth.json", no "/" after it) and a path that climbs first ("../.ssh/config"). A
-// redirection or a "--flag=" before the path is stripped.
+// A token holding a glob is the ordinary way to search a directory without -r, so it is expanded and
+// each match tested like a spelled path. A pattern matching more than GLOB_LIMIT paths is judged by
+// its static prefix instead of its matches: a huge expansion is slower than the block it prevents,
+// and the prefix says whether a root is even reachable from it.
+const GLOB_CHARS = /[*?[]/;
+const GLOB_LIMIT = 4000;
+const globCache = new Map<string, { paths: string[]; truncated: boolean } | undefined>();
+
+function globMatches(token: string, cwd: string): { paths: string[]; truncated: boolean } | undefined {
+	const key = `${cwd}\u0000${token}`;
+	const hit = globCache.get(key);
+	if (hit !== undefined || globCache.has(key)) return hit;
+	if (globCache.size > 500) globCache.clear();
+	const expanded = token === "~" ? HOME : token.startsWith("~/") ? join(HOME, token.slice(2)) : token;
+	let result: { paths: string[]; truncated: boolean } | undefined;
+	try {
+		const paths = globSync(expanded, { cwd }).slice(0, GLOB_LIMIT + 1);
+		result = { paths, truncated: paths.length > GLOB_LIMIT };
+	} catch {
+		result = undefined;
+	}
+	globCache.set(key, result);
+	return result;
+}
+
+// A path-shaped token (one holding a "/" or starting with ".", or a glob) that resolves into the
+// root from the working directory. This catches what the spelled forms miss: a relative file root
+// (".pi/agent/auth.json", no "/" after it), a path that climbs first ("../.ssh/config"), and a glob
+// over a directory above the root ("~/obsidian-vault/*/*.md"). A redirection or a "--flag=" before
+// the path is stripped.
 function pathTokenInRoot(segment: string, cwd: string, root: string): boolean {
 	return tokens(segment).some((t) => {
 		const p = t.replace(/^[0-9]*[<>]+/, "").replace(/^[^/=]*=/, "");
-		if (!(p.includes("/") || p.startsWith(".")) || p.includes("://")) return false;
+		if (p.includes("://")) return false;
+		if (GLOB_CHARS.test(p)) {
+			const globbed = globMatches(p, cwd);
+			if (globbed === undefined) return false;
+			if (globbed.truncated) {
+				const prefix = p.slice(0, p.search(GLOB_CHARS));
+				return within(root, absolute(prefix || ".", cwd));
+			}
+			return globbed.paths.some((match) => within(absolute(match, cwd), root));
+		}
+		if (!(p.includes("/") || p.startsWith("."))) return false;
 		return within(absolute(p, cwd), root);
 	});
 }
@@ -659,6 +731,13 @@ function searchRoots(
 			paths = positional.slice(1); // the first positional is the pattern
 			defaultsToCwd = true;
 			skipsHidden = head === "rg" && !args.some((t) => RG_UNRESTRICTED.has(t) || /^-[a-zA-Z]*u/.test(t));
+			break;
+		case "fd":
+			// `fd` takes the pattern first, then the paths, and skips hidden dirs unless told otherwise.
+			paths = positional.slice(1);
+			defaultsToCwd = true;
+			skipsHidden = !args.some((t) =>
+				/^--(hidden|unrestricted|no-ignore)$/.test(t) || /^-[a-zA-Z]*[HIu]/.test(t));
 			break;
 		case "du":
 		case "tree":

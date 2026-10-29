@@ -7,7 +7,7 @@
 //
 // The guard path defaults to the sibling ../private-guard.ts, so the suite works both in the
 // chezmoi source tree and in the deployed extensions directory. Exits non-zero on any mismatch.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -27,10 +27,31 @@ const MODELS = {
 	anthropic: { provider: "anthropic", id: "claude-sonnet-5" },
 	openai: { provider: "openai", id: "gpt-6-luna" },
 	google: { provider: "google", id: "gemini-3.8-flash" },
+	// The one provider with a per-id allowlist, and pi's default lane. Both directions matter: an
+	// allowlisted id is private, an id that is not listed is not.
+	go: { provider: "opencode-go", id: "deepseek-v4.1-flash" },
+	goUnlisted: { provider: "opencode-go", id: "some-model-nobody-allowlisted" },
 };
 
 const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 let failed = 0;
+
+// Roots must exist, or be absent on purpose. A root that has moved (Firefox did, to ~/.config/mozilla)
+// otherwise guards nothing, and no case notices: that is how this list fell behind the machine.
+const { ROOT_LISTS } = mod;
+for (const label of ["SECRET_ROOTS", "PRIVATE_ROOTS"]) {
+	for (const root of ROOT_LISTS[label]) {
+		if (ROOT_LISTS.ABSENT_ON_PURPOSE.has(root)) continue;
+		if (existsSync(root)) continue;
+		failed++;
+		console.log(`MISS ${label} root does not exist: ${root.replace(HOME, "~")}`);
+	}
+}
+for (const [root, why] of ROOT_LISTS.ABSENT_ON_PURPOSE) {
+	if (!existsSync(root)) continue;
+	failed++;
+	console.log(`MISS ${root.replace(HOME, "~")} is listed absent on purpose but exists (${why})`);
+}
 for (const c of cases) {
 	const cwd = c.cwd.replace(/^~/, HOME);
 	const input = c.tool === "bash" ? { command: c.cmd } : { path: c.path };
@@ -39,7 +60,7 @@ for (const c of cases) {
 	const got = result?.block ? "BLOCK" : "allow";
 	const ok = got === c.want;
 	if (!ok) failed++;
-	console.log(`${ok ? "ok  " : "MISS"} want=${c.want} got=${got}  [${c.cwd}] ${c.cmd ?? `${c.tool} ${c.path}`}`);
+	const why = ok ? "" : `\n       ${(result?.reason ?? "").split("\n")[0]}`;
+	console.log(`${ok ? "ok  " : "MISS"} want=${c.want} got=${got}  [${c.cwd}] ${c.cmd ?? `${c.tool} ${c.path}`}${why}`);
 }
-console.log(`\n${cases.length - failed}/${cases.length} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+console.log(`\n${cases.length - failed}/${cases.length} passed, ${failed} failed`);process.exit(failed === 0 ? 0 : 1);
