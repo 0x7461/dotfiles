@@ -1,6 +1,6 @@
 #!/bin/sh
 exec 2>&1
-/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
+/home/ta/.local/bin/wait-net 120 || exit 75   # 75 = deferred (the job never started), not 1 — see wait-net
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/chronicler
 # Fires every Saturday 10:00; scheduled.py gates to bi-weekly (>=13d since last run).

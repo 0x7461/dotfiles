@@ -1,6 +1,6 @@
 #!/bin/sh
 exec 2>&1
-/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
+/home/ta/.local/bin/wait-net 120 || exit 75   # 75 = deferred (the job never started), not 1 — see wait-net
 # summarize (npm, `#!/usr/bin/env node`) needs mise's node; ~/.local/bin holds summarize + claude
 export PATH="/home/ta/.local/share/mise/shims:/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/guild

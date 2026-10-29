@@ -1,5 +1,5 @@
 #!/bin/sh
 exec 2>&1
-/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
+/home/ta/.local/bin/wait-net 120 || exit 75   # 75 = deferred (the job never started), not 1 — see wait-net
 cd /home/ta/projects/guild
 exec snooze -H8-22 -M0 ./bin/nagger

@@ -8,8 +8,13 @@
 # "network is unreachable" against Tailscale's resolver, and scout skipped every
 # source yet still exited 0. A weekly job that loses this race loses its week.
 #
-# Exits 1 if the network never comes up, so the caller's `finish` hook records a
-# transient failure (exit 1 = retry next window) instead of a phantom success.
+# Exits 75 (EX_TEMPFAIL) if the network never comes up: the job DID NOT RUN, which is
+# not the same fact as "the job ran and failed". Caretaker reads 75 as *deferred* —
+# it neither extends nor clears a failure streak, and a service whose tail is only
+# 75s is reported as deferred rather than failing. Before 2026-10-29 this was exit 1,
+# so nine services that skipped at one slow boot (2026-10-27T05:15Z) read as "the job
+# is failing, not the scheduler" for two days. Callers must pass it through
+# unchanged: `wait-net 120 || exit 75`, never `|| exit 1`.
 # The cap matters: blocking forever would hold the snooze window open.
 #
 # Keep this dependency-free — it runs before anything else in a run script, so it
@@ -29,4 +34,4 @@ while [ "$waited" -lt "$limit" ]; do
 done
 
 echo "wait-net: network still down after ${limit}s; skipping this run" >&2
-exit 1
+exit 75

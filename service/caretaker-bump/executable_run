@@ -1,5 +1,7 @@
 #!/bin/sh
-/home/ta/.local/bin/wait-net 120 || exit 1   # boot can beat the network; don't run blind
+exec 2>&1
+# 75 = deferred (the job never started), never 1 — see wait-net.
+/home/ta/.local/bin/wait-net 120 || exit 75
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/caretaker
 # -t + -s 1d: a 04:00 slot missed while the laptop was off fires on next start
