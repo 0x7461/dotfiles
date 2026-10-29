@@ -73,6 +73,72 @@ for (const value of ["1", "true", "yes", ""]) {
 	check(`store: PI_STORE_CONTEXT=${JSON.stringify(value)} stays enabled`, text.includes("Behaviour rules — portable"));
 }
 
+
+// ---------------------------------------------------------------- store-context.ts, drift
+// The composed prompt is frozen for the session, so an edit to the store is invisible until the next
+// one — and a rule that silently did not apply is the failure this store exists to prevent. A temp
+// store root is the only way to edit one mid-session, which is what ITHACA_STORE is for.
+const driftStore = mkdtempSync(join(tmpdir(), "pi-store-drift-"));
+mkdirSync(join(driftStore, "rules"), { recursive: true });
+mkdirSync(join(driftStore, "styles"), { recursive: true });
+mkdirSync(join(driftStore, "memory"), { recursive: true });
+mkdirSync(join(driftStore, "harnesses"), { recursive: true });
+writeFileSync(join(driftStore, "AGENTS.md"), "# Store\n\nGlobal rules.\n");
+writeFileSync(join(driftStore, "rules", "behaviour.md"), "# Behaviour\n\nDo the thing.\n");
+writeFileSync(join(driftStore, "styles", "answer-first-concise.md"), "# Style\n");
+writeFileSync(join(driftStore, "memory", "MEMORY.md"), "# Memory\n");
+process.env.ITHACA_STORE = driftStore;
+
+const drift = await import(`${here}store-context.ts?drift`);
+const driftHandlers = handlersFor(drift);
+const statusCalls = [];
+const driftCtx = (notices) => ({
+	hasUI: true,
+	sessionManager: { getSessionId: () => "drift-session" },
+	ui: {
+		notify: (msg, level) => notices.push([msg, level]),
+		setStatus: (key, text) => statusCalls.push([key, text]),
+	},
+});
+
+let driftNotices = [];
+await driftHandlers.session_start({}, driftCtx(driftNotices));
+const first = await driftHandlers.before_agent_start({ systemPrompt: "BASE" }, driftCtx(driftNotices));
+check("drift: composes from ITHACA_STORE", first.systemPrompt.includes("Do the thing."));
+check("drift: no notice on an untouched store", driftNotices.length === 0 && statusCalls.length === 0);
+
+// A real edit: the stamp carries size as well as mtime, because two writes inside one tick can share
+// an mtime on a coarse filesystem.
+writeFileSync(join(driftStore, "rules", "behaviour.md"), "# Behaviour\n\nDo the thing, twice.\n");
+driftNotices = [];
+const second = await driftHandlers.before_agent_start({ systemPrompt: "BASE" }, driftCtx(driftNotices));
+check("drift: one warning after an edit", driftNotices.length === 1 && driftNotices[0][1] === "warning");
+check("drift:   ... names the delay", driftNotices[0][0].includes("applies to the next session"));
+check("drift:   ... and sets a persistent status", statusCalls.length === 1 && statusCalls[0][0] === "ithaca-store");
+check(
+	"drift: the frozen prompt keeps the OLD text (which is why the warning exists)",
+	!second.systemPrompt.includes("twice."),
+);
+
+// The status carries it from here, so later turns must not toast again.
+writeFileSync(join(driftStore, "AGENTS.md"), "# Store\n\nGlobal rules, revised.\n");
+driftNotices = [];
+await driftHandlers.before_agent_start({ systemPrompt: "BASE" }, driftCtx(driftNotices));
+check("drift: a later edit does not toast again", driftNotices.length === 0 && statusCalls.length === 1);
+
+// A harness file appearing is a change too, and it is a change from the first turn of a session —
+// so it needs its own instance: the one above has already had its single warning.
+const freshNotices = [];
+const fresh = handlersFor(await import(`${here}store-context.ts?drift-new-file`));
+await fresh.session_start({}, driftCtx(freshNotices));
+check("drift: the first session has no harness file", freshNotices.length === 0);
+writeFileSync(join(driftStore, "harnesses", "pi.md"), "# pi\n\nOne quirk.\n");
+await fresh.before_agent_start({ systemPrompt: "BASE" }, driftCtx(freshNotices));
+check("drift: an appearing harness file counts as an edit", freshNotices.length === 1);
+
+delete process.env.ITHACA_STORE;
+rmSync(driftStore, { recursive: true, force: true });
+
 delete process.env.PI_STORE_CONTEXT;
 
 // ---------------------------------------------------------------- notify.ts
