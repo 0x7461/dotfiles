@@ -343,6 +343,85 @@ check("name: deriveName leaves inline markup alone",
 
 process.env.PATH = realPath;
 rmSync(scratch, { recursive: true, force: true });
+
+// ---------------------------------------------------------------- work-brief.ts
+// The brief is keyed on the *checkout*, so the test makes one: a temp journal root holding a work in
+// the project this process appears to be in, with ITHACA_CONTEXT_ROOT pointing at it. That is the
+// CLI's own documented seam, so nothing new is invented for the test.
+const briefRoot = mkdtempSync(join(tmpdir(), "pi-work-brief-"));
+const briefDir = join(briefRoot, "cwd");
+mkdirSync(briefDir, { recursive: true });
+const briefProject = briefDir.split("/").pop();
+const briefJournal = join(briefRoot, "work", briefProject);
+mkdirSync(briefJournal, { recursive: true });
+const briefWork = "w-brief0001";
+writeFileSync(
+	join(briefJournal, `${briefWork}.jsonl`),
+	JSON.stringify({
+		rev: 1, kind: "checkpoint", ts: "2026-10-30T10:00:00Z", work_id: briefWork,
+		project: briefProject, label: "brief test work", origin: { harness: "pi" }, repo: null,
+		payload: { objective: "prove the brief", next_safe_action: "read the brief back" },
+	}) + "\n",
+);
+
+const realCwd = process.cwd();
+let briefNotices = [];
+const briefCtx = (mode) => ({
+	mode,
+	hasUI: true,
+	systemPrompt: "BASE",
+	ui: { notify: (msg, level) => briefNotices.push([msg, level]) },
+});
+
+async function briefWith(mode, root = join(briefRoot, "work")) {
+	briefNotices = [];
+	process.env.ITHACA_CONTEXT_ROOT = root;
+	process.chdir(briefDir);
+	try {
+		const fresh = handlersFor(await import(`${here}work-brief.ts?case=${mode}-${Math.random()}`));
+		await fresh.session_start({}, briefCtx(mode));
+		const out = await fresh.before_agent_start({ systemPrompt: "BASE" }, briefCtx(mode));
+		return { text: out?.systemPrompt ?? "BASE", notices: briefNotices };
+	} finally {
+		process.chdir(realCwd);
+	}
+}
+
+const briefed = await briefWith("tui");
+check("brief: injected in a TUI session", briefed.text.includes("## Open work on this checkout"));
+check("brief: names the work", briefed.text.includes(briefWork));
+check("brief: carries the next action", briefed.text.includes("read the brief back"));
+check("brief: appended after the base prompt", briefed.text.startsWith("BASE\n\n"));
+check("brief: exactly three lines", briefed.text.split("\n").length === 5);   // BASE + blank + 3
+check("brief: no notice on success", briefed.notices.length === 0);
+
+for (const mode of ["print", "json", "rpc"]) {
+	const { text, notices } = await briefWith(mode);
+	check(`brief: silent in ${mode} mode`, text === "BASE", text.slice(0, 60));
+	check(`brief:    ... and does not even run the CLI (${mode})`, notices.length === 0);
+}
+
+const emptyRoot = join(briefRoot, "empty");
+mkdirSync(emptyRoot, { recursive: true });
+const none = await briefWith("tui", emptyRoot);
+check("brief: nothing injected when no work is open here", none.text === "BASE");
+
+// A corrupt journal must surface, not vanish: injecting nothing is right, staying silent is not.
+const brokenRoot = join(briefRoot, "broken");
+mkdirSync(join(brokenRoot, briefProject), { recursive: true });
+writeFileSync(
+	join(brokenRoot, briefProject, "w-broken.jsonl"),
+	JSON.stringify({ rev: 7, kind: "checkpoint", ts: "2026-10-30T10:00:00Z", work_id: "w-broken",
+		project: briefProject, label: "x", origin: {}, repo: null,
+		payload: { objective: "x", next_safe_action: "y" } }) + "\n",
+);
+const broken = await briefWith("tui", brokenRoot);
+check("brief: a corrupt journal injects nothing", broken.text === "BASE");
+check("brief:    ... and says why in the UI", broken.notices.length === 1 &&
+	broken.notices[0][0].includes("work brief unavailable") && broken.notices[0][1] === "warning");
+
+rmSync(briefRoot, { recursive: true, force: true });
+
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) {
 	for (const f of failures) console.log(`  ${f}`);
