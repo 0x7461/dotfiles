@@ -25,7 +25,7 @@
     "dock": "left"
   },
   "telemetry": {
-    "diagnostics": true,
+    "diagnostics": false,
     "metrics": false
   },
   // Zed installed via Void xbps (root-owned /usr/lib/zed); self-updater can't
@@ -38,6 +38,6 @@
   "theme": {
     "mode": "dark",
     "light": "One Light",
-    "dark": "One Dark",
+    "dark": "Gruvbox Dark",
   },
 }
