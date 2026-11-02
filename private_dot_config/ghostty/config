@@ -19,3 +19,9 @@ font-family = Iosevka Term
 font-size = 12
 cursor-style-blink = false
 env = USE_TMUX=0
+# Remote hosts (nas) have no xterm-ghostty terminfo, so ssh from here leaves
+# keys/colors broken. ssh-env + ssh-terminfo wrap ssh in `ghostty +ssh`, which
+# installs the remote terminfo on first connect and falls back to
+# xterm-256color when tic is missing. Defaults otherwise (sudo stays unwrapped:
+# our local terminfo is system-wide).
+shell-integration-features = cursor,no-sudo,title,ssh-env,ssh-terminfo,path
