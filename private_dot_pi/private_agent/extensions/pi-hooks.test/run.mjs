@@ -8,6 +8,7 @@
 //
 // Everything runs through the extensions' real handlers with a fake context and a narrowed PATH, so
 // no model, no desktop session and no writes outside a temp dir are involved.
+import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -421,6 +422,45 @@ check("brief:    ... and says why in the UI", broken.notices.length === 1 &&
 	broken.notices[0][0].includes("work brief unavailable") && broken.notices[0][1] === "warning");
 
 rmSync(briefRoot, { recursive: true, force: true });
+
+
+// git-state.ts: which branch each part of a session happened on. CC stamps `gitBranch` on every row;
+// pi cannot, so the extension appends a marker whenever the branch or HEAD moves, and the reader
+// attributes rows to the newest marker above them. The subprocess is the fragile part, so it runs
+// against a real temp repo here.
+const gitState = await import(`${here}git-state.ts?case=${Date.now()}`);
+const repo = mkdtempSync(join(tmpdir(), "git-state-"));
+execFileSync("git", ["-C", repo, "init", "-q", "."]);
+writeFileSync(join(repo, "a.txt"), "one\n");
+execFileSync("git", ["-C", repo, "add", "a.txt"]);
+execFileSync("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "first"]);
+const head = execFileSync("git", ["-C", repo, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+const sampled = await gitState.sample(repo);
+check("git-state: a work tree yields branch and short commit",
+	sampled?.branch === "master" && sampled?.head === head, JSON.stringify(sampled));
+check("git-state: a detached HEAD is not labelled HEAD",
+	gitState.parseState("/x", "HEAD\nabc1234\n")?.branch === "detached");
+check("git-state: a plain directory yields null",
+	(await gitState.sample(tmpdir())) === null, "outside a work tree");
+check("git-state: the same state is not a change", gitState.changed(sampled, { ...sampled }) === false);
+check("git-state: a new branch is a change", gitState.changed(sampled, { ...sampled, branch: "fix" }) === true);
+
+const entries = [];
+const gitHandlers = {};
+const gitPi = {
+	on: (event, handler) => (gitHandlers[event] = handler),
+	appendEntry: (type, data) => entries.push([type, data]),
+};
+(await import(`${here}git-state.ts?case=handlers`)).default(gitPi);
+await gitHandlers.session_start({}, { cwd: repo });
+await gitHandlers.tool_execution_end({}, { cwd: repo });
+check("git-state: one marker for a session that stays put", entries.length === 1, String(entries.length));
+check("git-state: the marker names the branch", entries[0]?.[1]?.branch === "master");
+execFileSync("git", ["-C", repo, "switch", "-q", "-c", "probe-branch"]);
+await gitHandlers.tool_execution_end({}, { cwd: repo });
+check("git-state: a branch switch writes a second marker", entries.length === 2, String(entries.length));
+check("git-state: the second marker carries the new branch", entries[1]?.[1]?.branch === "probe-branch");
+rmSync(repo, { recursive: true, force: true });
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) {
