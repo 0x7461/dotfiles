@@ -4,14 +4,17 @@ exec 2>&1
 /home/ta/.local/bin/wait-net 120 || exit 75
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/caretaker
-# The job wakes daily but *works* every 3 days: caretaker.bump checks its own window
-# (~/.local/state/caretaker/digest-sent) and exits 0 while it is open, so smith bumps and the
-# pending-xbps count move together and one window cannot send two messages.
+# Every 3 days at 04:00: smith template bumps (built when there are any) plus the pending official
+# xbps count, in one Telegram digest, sent only when one of the two has news.
 #
-# -t + -s 1d: a 04:00 slot missed while the laptop was off fires on next start
-# instead of waiting a day. The job touches the timefile before running, so a
-# failed run waits for the next slot rather than looping.
+# The cadence is snooze's, not the job's — no state in Python:
+#   -D /3    every 3rd day of the year (day-of-year, so month lengths don't skew it)
+#   -H4 -M0  04:00
+#   -s 3d    a slot missed while the laptop was off still runs at startup, up to 3 days late
+#   -J 120   up to 2 min of jitter, so a boot-time catch-up doesn't race the other boot services
+#   -t/-s    the timefile's mtime is where the next run is measured from; touch it *before* the job
+#            so a failure waits for the next slot instead of looping
 tf=/home/ta/.local/state/snooze/caretaker-bump
 mkdir -p "${tf%/*}"
-exec snooze -t "$tf" -s 1d -H4 -M0 \
+exec snooze -t "$tf" -s 3d -J 120 -D /3 -H4 -M0 \
   sh -c 'touch "$1" && exec uv run python -m caretaker.bump' sh "$tf" 2>&1
