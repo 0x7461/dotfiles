@@ -17,7 +17,7 @@
 # and `sv restart` terminate ./run with SIGTERM, which arrives here as exit -1
 # and would otherwise log a phantom failure every time a service is restarted by
 # hand. caretaker treats (-1, 15) as a deliberate stop, not a failed run.
-d="${HOME:-/home/ta}/.cache/caretaker/runs"
+d="${XDG_DATA_HOME:-${HOME:-/home/ta}/.local/share}/caretaker/runs"
 n=$(basename "$(pwd)")
 mkdir -p "$d" || exit 0
 printf '%s %s %s\n' "$1" "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$d/$n"

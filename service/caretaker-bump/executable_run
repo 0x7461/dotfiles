@@ -4,6 +4,10 @@ exec 2>&1
 /home/ta/.local/bin/wait-net 120 || exit 75
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/caretaker
+# The job wakes daily but *works* every 3 days: caretaker.bump checks its own window
+# (~/.local/state/caretaker/digest-sent) and exits 0 while it is open, so smith bumps and the
+# pending-xbps count move together and one window cannot send two messages.
+#
 # -t + -s 1d: a 04:00 slot missed while the laptop was off fires on next start
 # instead of waiting a day. The job touches the timefile before running, so a
 # failed run waits for the next slot rather than looping.
