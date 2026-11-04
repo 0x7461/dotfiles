@@ -9,6 +9,7 @@
     "chronicler": {
       "command": "/usr/bin/uv",
       "args": ["run", "--project", "/home/ta/projects/chronicler", "python", "/home/ta/projects/chronicler/server.py"],
+      "env": {"CHRONICLER_LLM_BACKEND": "none"},
       "timeout": 120,
       "exposure": "direct"
     }

@@ -1,3 +1,0 @@
-#!/bin/sh
-export OLLAMA_HOST=0.0.0.0
-exec ollama serve 2>&1
