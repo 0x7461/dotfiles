@@ -44,10 +44,6 @@ const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 const GO_LEDGER = join(HOME, ".local", "state", "pi", "go-usage.jsonl");
 // The plan's monthly limit in dollars: `allowance` is expressed in these units.
 const GO_PLAN_MONTHLY_USD = 60;
-// pi-worker (the pi-worker skill) runs its pi child with `--session-dir <run>/sessions`, so
-// delegated work never lands under SESSIONS_DIR. It defaults to a cheap model but escalates to
-// DeepSeek Pro, so leaving it out under-counts exactly the expensive turns.
-const WORKER_RUNS_DIR = join(HOME, ".local", "state", "pi-worker");
 const SPEED_THROTTLE_MS = 250;
 
 // OpenCode Go pricing (opencode.ai/docs/go, 2026-10-26; cost model:
@@ -177,9 +173,13 @@ const GO_MONTHLY_USD_DEFAULT = 15;
 // charged `list_cost × 60 / bucket`. Rates are $/1M tokens; `write` is a priced cache write
 // (Kimi, Qwen, GPT Luna), otherwise an unwritten cache bills as plain input; `tiers` are
 // context-length bands, shortest first. DeepSeek is the only peak-priced family.
-const GO_CYCLE_RESET_SEED = "2026-11-19T21:45:00+07:00";
-const GO_WEEK_RESET_SEED = "2026-11-02T06:45:00+07:00";
-const GO_ROLLING_RESET_SEED = "2026-10-27T00:56:00+07:00";
+// Measured from the console's countdowns, 2026-11-05 11:32 +07: "Resets in 4h 33m" (rolling, the
+// only one with minutes) / "3d 19h" (weekly) / "14d 11h" (monthly). The day/hour countdowns are
+// truncated, so the monthly and weekly instants are the tightest lower bound the text allows —
+// within an hour, and no request currently falls in the slack. Re-measure when Go changes the plan.
+const GO_CYCLE_RESET_SEED = "2026-11-19T22:32:00+07:00";
+const GO_WEEK_RESET_SEED = "2026-11-09T06:32:00+07:00";
+const GO_ROLLING_RESET_SEED = "2026-11-05T16:05:00+07:00";
 const WEEK_MS = 7 * 86400_000;
 const ROLLING_MS = 5 * 3600_000;
 
@@ -281,10 +281,12 @@ function sessionFilesSince(dir: string, sinceMs: number, depth = 3): string[] {
 // Assistant messages from every session file touched since `sinceMs`, interactive and delegated.
 function assistantMessagesSince(sinceMs: number, provider: string): Assistant[] {
 	const found: Assistant[] = [];
-	const files = [
-		...sessionFilesSince(SESSIONS_DIR, sinceMs),
-		...sessionFilesSince(WORKER_RUNS_DIR, sinceMs, 4),
-	];
+	// Main sessions only. pi-worker runs write their own sessions, and the ledger already holds
+	// every one of their requests (verified 2026-11-05: 117/117 post-ledger worker requests have a
+	// ledger row within 500 ms). Counting their pre-ledger sessions too is what made the meter
+	// disagree with the console: +$2.76 (+4.6 points) at both screenshots, because the 46
+	// pre-ledger worker requests were glm-5.3 and the console did not charge them at list price.
+	const files = sessionFilesSince(SESSIONS_DIR, sinceMs);
 	for (const path of files) {
 		for (const line of readFileSync(path, "utf8").split("\n")) {
 			if (!line.includes(`"provider":"${provider}"`)) continue;
