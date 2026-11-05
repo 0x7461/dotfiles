@@ -1,6 +1,6 @@
 #!/bin/sh
-# wait-net [SECONDS] — block until a name resolves, so a job that fires on boot
-# doesn't run blind.
+# wait-net [SECONDS] [SETTLE] — block until a name resolves *and keeps* resolving, so a
+# job that fires on boot doesn't run blind.
 #
 # runsvdir starts every service at once, and snooze's catch-up windows fire
 # immediately on boot. On 2026-10-24 (boot 01:59:34Z) the 09:00-local batch ran
@@ -8,26 +8,40 @@
 # "network is unreachable" against Tailscale's resolver, and scout skipped every
 # source yet still exited 0. A weekly job that loses this race loses its week.
 #
+# One lookup is not proof the link is up. 2026-11-05: caretaker-bump passed this guard at
+# two cold boots and lost `api.telegram.org` four minutes later with EAI_AGAIN (exit 1
+# twice) — a resolver answering once while tailscaled's upstream is still coming up. So
+# the answer must hold across a settle gap.
+#
+# The cap is a retry interval, not a deadline: runsv restarts ./run the moment this exits
+# 75, so the job still fires within two seconds of the network appearing. It has to be
+# long enough, though, for a link a human brings up by hand after boot — a phone hotspot
+# on a metered plan is not up when runsvdir starts, and the user may need minutes.
+#
 # Exits 75 (EX_TEMPFAIL) if the network never comes up: the job DID NOT RUN, which is
 # not the same fact as "the job ran and failed". Caretaker reads 75 as *deferred* —
 # it neither extends nor clears a failure streak, and a service whose tail is only
 # 75s is reported as deferred rather than failing. Before 2026-10-29 this was exit 1,
 # so nine services that skipped at one slow boot (2026-10-27T05:15Z) read as "the job
 # is failing, not the scheduler" for two days. Callers must pass it through
-# unchanged: `wait-net 120 || exit 75`, never `|| exit 1`.
+# unchanged: `wait-net 300 || exit 75`, never `|| exit 1`.
 # The cap matters: blocking forever would hold the snooze window open.
 #
 # Keep this dependency-free — it runs before anything else in a run script, so it
 # cannot rely on PATH entries those scripts add later.
 
-limit=${1:-120}
+limit=${1:-300}
+settle=${2:-15}
 waited=0
 while [ "$waited" -lt "$limit" ]; do
 	# `getent hosts` is the same resolver the jobs use; when the network is down
 	# this fails with the resolver's own address unreachable, which is exactly
 	# the failure this needs to catch.
 	if getent hosts github.com >/dev/null 2>&1; then
-		exit 0
+		sleep "$settle"
+		waited=$((waited + settle))
+		getent hosts github.com >/dev/null 2>&1 && exit 0
+		continue
 	fi
 	sleep 2
 	waited=$((waited + 2))

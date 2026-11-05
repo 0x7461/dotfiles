@@ -1,7 +1,19 @@
 #!/bin/sh
 exec 2>&1
 # 75 = deferred (the job never started), never 1 — see wait-net.
-/home/ta/.local/bin/wait-net 120 || exit 75
+/home/ta/.local/bin/wait-net 300 || exit 75
 export PATH="/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/caretaker
-exec snooze -w 6 -H 9 -M 0 uv run python -m caretaker scan 2>&1
+# Saturday 09:00, with catch-up: a Saturday the laptop spends off must not cost the week
+# (2026-10-31 was spent off, and the scan went 12 days without running).
+#
+#   -t/-s   the timefile's mtime is where the next run is measured from; touch it *before*
+#           the job so a failure waits for the next Saturday instead of looping
+#   -s 3d   a missed slot still runs at startup, up to 3 days late
+#
+# No -J: snooze applies jitter inside the catch-up search, which lands the candidate past
+# the slack and skips to the following week instead (vault system/services.md).
+tf=/home/ta/.local/state/snooze/caretaker-scan
+mkdir -p "${tf%/*}"
+exec snooze -t "$tf" -s 3d -w 6 -H 9 -M 0 \
+  sh -c 'touch "$1" && exec uv run python -m caretaker scan' sh "$tf" 2>&1
