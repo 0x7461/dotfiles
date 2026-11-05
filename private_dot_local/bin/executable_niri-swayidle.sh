@@ -2,10 +2,9 @@
 # Idle daemon for niri. Replaces hypridle.
 # Spawned by ~/.config/niri/config.kdl spawn-at-startup.
 #
-# Timings (tightened on request 2026-10-30; same on battery and AC):
-#   60s    kbd backlight off + dim screen
-#   180s   lock session
-#   300s   power off monitors
+# Timings (tightened 2026-10-30, loosened 2026-11-04; same on battery and AC):
+#   300s   kbd backlight off + dim screen + lock session
+#   420s   power off monitors
 # Silent playback does not inhibit idle: wayland-pipewire-idle-inhibit only
 # holds the clock while PipeWire is actually outputting audio, so a muted or
 # audio-less video still dims at 60s.
@@ -20,12 +19,12 @@
 # diagnostic `logger -t swayidle ...` prefixes were removed once confirmed.)
 
 exec swayidle -w \
-    timeout 60   'brightnessctl -sd rgb:kbd_backlight set 0' \
+    timeout 300  'brightnessctl -sd rgb:kbd_backlight set 0' \
         resume   'brightnessctl -rd rgb:kbd_backlight' \
-    timeout 60   'brightnessctl -s set 10' \
+    timeout 300  'brightnessctl -s set 10' \
         resume   'brightnessctl -r' \
-    timeout 180  'pidof hyprlock || hyprlock &' \
-    timeout 300  'niri msg action power-off-monitors' \
+    timeout 300  'pidof hyprlock || hyprlock &' \
+    timeout 420  'niri msg action power-off-monitors' \
         resume   'niri msg action power-on-monitors && brightnessctl -r' \
     before-sleep 'pidof hyprlock || hyprlock & sleep 1' \
     lock         'pidof hyprlock || hyprlock &' \
