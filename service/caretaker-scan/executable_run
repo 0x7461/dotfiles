@@ -11,8 +11,7 @@ cd /home/ta/projects/caretaker
 #           the job so a failure waits for the next Saturday instead of looping
 #   -s 3d   a missed slot still runs at startup, up to 3 days late
 #
-# No -J: snooze applies jitter inside the catch-up search, which lands the candidate past
-# the slack and skips to the following week instead (vault system/services.md).
+# No -J: one weekly job, nothing to spread — the catch-up is the point, not the spread.
 tf=/home/ta/.local/state/snooze/caretaker-scan
 mkdir -p "${tf%/*}"
 exec snooze -t "$tf" -s 3d -w 6 -H 9 -M 0 \
