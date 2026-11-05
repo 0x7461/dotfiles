@@ -31,12 +31,16 @@ import { join } from "node:path";
 // ledger below; anything older, or from another pi that predates the ledger, is backfilled
 // from tokens at the published rates. The 5-hour window allows 20% of the monthly quota, the
 // week 50%, and all three are buckets over one pooled quota: a model's own monthly limit is only
-// the rate its dollars are converted into that pool, so charges from every model are summed. The
-// segment reports what
-// is **left**, not what is spent: the number you act on is headroom, and colour still follows
-// consumption, so a comfortable remainder never reads green while it is actually running out.
-// Past the quota Go bills the Console balance; `credit $X` is what that has cost this cycle
-// (`billing_source: "balance"`). The balance itself is never reported by the API.
+// the rate its dollars are converted into that pool, so charges from every model are summed.
+//
+// The segment reports what was **spent**, matching the console and pi's own cost line; `/go-meter`
+// switches it to headroom, and the current mode is printed first. Colour keys off consumption in
+// both readings, so a comfortable remainder never reads green while a window is nearly gone.
+//
+// Past a limit Go bills the Console balance (`billing_source: "balance"`), and the segment then
+// says `on credit` — the fact, not an amount: no API reports the remaining balance, and a
+// hand-seeded figure drifts. Verified 2026-11-05 against the console's $4.28: all 6,024 captured
+// requests so far were billed to the plan (`go`, `cost: 0`), so this path has never fired.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 // One JSON line per Go request, written from `provider_stream_event`: the only place the vendor
