@@ -14,5 +14,12 @@ cd /home/ta/projects/guild
 #
 # 18:00 not noon: measured activity is evening-weighted (17:00-01:00 local).
 # Friday not Saturday: scout already delivers Sat 09:00; keep them apart.
-exec snooze -H18 -M0 \
-  sh -c 'case $(date +%u) in 1|5) m=deliver ;; *) m=curate ;; esac; exec /home/ta/projects/guild/bin/paperboy -mode="$m"'
+#
+# -t/-s added 2026-11-12: with no timefile, any boot after 18:00 deferred the next run a full
+# day, so a laptop that woke in the evening ran nothing for three days (last run 2026-11-08
+# 09:02). 6h slack catches a same-evening start and still refuses a morning one, and it is well
+# under the 1d period — slack >= period makes every start execute.
+tf=/home/ta/.local/state/snooze/paperboy
+mkdir -p "${tf%/*}"
+exec snooze -t "$tf" -s 6h -H18 -M0 \
+  sh -c 'touch "$1" && case $(date +%u) in 1|5) m=deliver ;; *) m=curate ;; esac; exec /home/ta/projects/guild/bin/paperboy -mode="$m"' sh "$tf"

@@ -7,4 +7,12 @@ export PATH="/home/ta/.local/bin:$PATH"
 export CHRONICLER_LLM_BACKEND=none
 cd /home/ta/projects/chronicler
 # Fires every Saturday 10:00; scheduled.py gates to bi-weekly (>=13d since last run).
-exec snooze -w6 -H10 -M0 /home/ta/projects/chronicler/bin/chronicler-review
+#
+# -t/-s is the catch-up, added 2026-11-12: with no timefile a boot after 10:00 deferred the run a
+# week, so two Saturday windows spent asleep cost a fortnight (last run 2026-10-25). 1d slack is
+# shorter than the 7d period — with slack >= period the job fires at every start instead of
+# waiting — and the bi-weekly gate inside scheduled.py still decides whether work happens.
+tf=/home/ta/.local/state/snooze/chronicler-review
+mkdir -p "${tf%/*}"
+exec snooze -t "$tf" -s 1d -w6 -H10 -M0 \
+  sh -c 'touch "$1" && exec /home/ta/projects/chronicler/bin/chronicler-review' sh "$tf"

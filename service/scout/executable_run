@@ -5,8 +5,15 @@ exec 2>&1
 export PATH="/home/ta/.local/share/mise/shims:/home/ta/.local/bin:$PATH"
 cd /home/ta/projects/guild
 
-# Wait until Saturday at 09:00
-# -w6 = Saturday (0=Sunday, 6=Saturday)
-# -H9 = 9 AM, -M0 = minute 0
-exec snooze -w6 -H9 -M0 \
-  /home/ta/projects/guild/bin/scout
+# Saturday 09:00. The -t/-s pair is the catch-up, added 2026-11-12: with no timefile, a boot
+# after 09:00 deferred the next run a whole week, and two Saturday windows spent asleep cost a
+# fortnight (last run 2026-10-25). 1d slack refuses a Tuesday run but lets a boot on Saturday
+# afternoon or Sunday morning deliver. Slack must stay under the 7d period or the job fires at
+# every start instead of waiting (see caretaker-bump's -s 3d on a 3-day schedule).
+#
+# The timefile is touched *before* the job, so a failure waits for the next slot rather than
+# looping on the supervisor's restart.
+tf=/home/ta/.local/state/snooze/scout
+mkdir -p "${tf%/*}"
+exec snooze -t "$tf" -s 1d -w6 -H9 -M0 \
+  sh -c 'touch "$1" && exec /home/ta/projects/guild/bin/scout' sh "$tf"
