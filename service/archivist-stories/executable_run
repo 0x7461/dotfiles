@@ -20,7 +20,7 @@ sys.exit(0 if datetime.now(timezone.utc) - datetime.fromisoformat(last) > timede
   sleep "$(shuf -i 0-1800 -n1)"
   /home/ta/projects/archivist/.venv/bin/archivist sync --only stories
   rc=$?
-  runs="${HOME:-/home/ta}/.cache/caretaker/runs/archivist-stories"
+  runs="${HOME:-/home/ta}/.local/share/caretaker/runs/archivist-stories"
   mkdir -p "$(dirname "$runs")"
   printf '%s 0 %s\n' "$rc" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$runs"
 fi
