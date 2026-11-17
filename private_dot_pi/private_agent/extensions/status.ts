@@ -159,16 +159,23 @@ const GO_MODELS: Record<string, GoModel> = {
 // Unknown model: assume the smallest common allowance so the meter errs toward warn.
 const GO_MONTHLY_USD_DEFAULT = 15;
 
-// One quota, three fixed buckets, all account-level: the console's Limits panel read
-// `Rolling 1% (resets in 4h 11m) · Weekly 2% (6d 10h) · Monthly 51% (24d 1h)` at 2026-10-26
-// 20:45, and these buckets reproduce it as 1%, 2.0% and 51.0%. A model's own monthly limit is
-// only the conversion rate into the pool — Pro's $15 makes $1 of its list price cost $4 of the
-// $60, Flash's $80 makes one cost $0.75 — so charges from **every** model are summed, never
-// kept apart. (The console's Models panel, Flash 74% / Pro 25% / GLM-5.3 1%, is a share of the
-// period's traffic, not of the allowance: Pro alone holds 84% of the allowance spend.) Each
-// bucket resets on its own grid, seeded from the console's countdowns below and advanced here
-// rather than stored per session. Re-seed when the plan or billing anchor changes — a stale
-// seed shows plausible percentages with no way to notice.
+// The three windows mirror the Console's Go page, and each reads as a share of the one monthly
+// allowance — the Console prints "5-hour window 12% used · Weekly 15% · Monthly 80%", where 12%
+// and 15% are percentages of the monthly allowance, not of a smaller bucket. The 5-hour (20%) and
+// weekly (50%) figures are rate *limits* — a ceiling on how much of the allowance a window may
+// burn — not denominators for the percentage. A model's own monthly limit is the conversion rate
+// into the pool: Pro's $15 makes $1 of list price cost $4 of the $60 allowance, Flash's $80 makes
+// it cost $0.75, so charges from **every** model are summed, never kept apart. (The Console's
+// Models panel is a share of traffic, not of allowance.)
+//
+// Window boundaries, per opencode.ai/docs/console/go:
+//   • 5-hour — 20% limit, window starts on first use and lasts five hours. Modelled here as the
+//     trailing 5 hours: it needs no seed, and the old fixed grid drifted every time the window
+//     re-anchored, which is the "wrong again" bug that kept coming back.
+//   • weekly — 50% limit, resets Monday 00:00 UTC.
+//   • monthly — 100% limit, resets when the paid period renews; the seed below is the renewal
+//     instant.
+//
 // The segment reads consumption or headroom, the console's way or the spare-capacity way; `/go-meter`
 // switches, the choice persists in `~/.local/state/pi/footer.json`, and consumption is the default
 // because that is what the console and every other quota readout shows.
@@ -177,14 +184,7 @@ const GO_MONTHLY_USD_DEFAULT = 15;
 // charged `list_cost × 60 / bucket`. Rates are $/1M tokens; `write` is a priced cache write
 // (Kimi, Qwen, GPT Luna), otherwise an unwritten cache bills as plain input; `tiers` are
 // context-length bands, shortest first. DeepSeek is the only peak-priced family.
-// Measured from the console's countdowns, 2026-11-05 11:32 +07: "Resets in 4h 33m" (rolling, the
-// only one with minutes) / "3d 19h" (weekly) / "14d 11h" (monthly). The day/hour countdowns are
-// truncated, so the monthly and weekly instants are the tightest lower bound the text allows —
-// within an hour, and no request currently falls in the slack. Re-measure when Go changes the plan.
 const GO_CYCLE_RESET_SEED = "2026-11-19T22:32:00+07:00";
-const GO_WEEK_RESET_SEED = "2026-11-09T06:32:00+07:00";
-const GO_ROLLING_RESET_SEED = "2026-11-05T16:05:00+07:00";
-const WEEK_MS = 7 * 86400_000;
 const ROLLING_MS = 5 * 3600_000;
 
 // Which way the spend segment reads. A display preference, so it lives with the ledger in the
@@ -225,21 +225,11 @@ function plusMonths(t: number, n: number): number {
 	return target.getTime();
 }
 
-// The week bucket starts at the cycle anchor and steps in 7-day units from there, so a cycle's
-// last week is short. Start of the bucket containing `now`.
+// Start of the Monday-00:00-UTC week containing `now`.
 function goWeekStart(now: number): number {
-	let reset = Date.parse(GO_WEEK_RESET_SEED);
-	while (reset <= now) reset += WEEK_MS;
-	return reset - WEEK_MS;
-}
-
-// The 5-hour budget the console calls "Rolling" still has a reset instant, so it is a fixed
-// grid rather than a sliding window: a sliding one would over-count right after a reset, which
-// is the case that matters.
-function goRollingStart(now: number): number {
-	let reset = Date.parse(GO_ROLLING_RESET_SEED);
-	while (reset <= now) reset += ROLLING_MS;
-	return reset - ROLLING_MS;
+	const d = new Date(now);
+	const sinceMonday = (d.getUTCDay() + 6) % 7;
+	return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - sinceMonday);
 }
 
 function goCycleStart(now: number): number {
@@ -444,8 +434,8 @@ function goStatus(ctx: ExtensionContext): string {
 		return heat(ctx, spent, `${label} ${text}`);
 	};
 	const meters = [
-		meter("5h", dollars(goRollingStart(now)), GO_PLAN_MONTHLY_USD * 0.2),
-		meter("week", dollars(goWeekStart(now)), GO_PLAN_MONTHLY_USD * 0.5),
+		meter("5h", dollars(now - ROLLING_MS), GO_PLAN_MONTHLY_USD),
+		meter("week", dollars(goWeekStart(now)), GO_PLAN_MONTHLY_USD),
 		meter("month", dollars(cycleStart), GO_PLAN_MONTHLY_USD),
 	];
 	// Go bills the Console balance once a window is exhausted and says so on every response, so the
