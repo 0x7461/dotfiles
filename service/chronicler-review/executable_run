@@ -2,9 +2,10 @@
 exec 2>&1
 /home/ta/.local/bin/wait-net 300 || exit 75   # 75 = deferred (the job never started), not 1 — see wait-net
 export PATH="/home/ta/.local/bin:$PATH"
-# No LLM backend is left: ollama was uninstalled 2026-11-04 and `claude-code` has been dead since
-# 2026-10-11. Pin `none` so the deterministic fallback is a decision, not a refused connection.
-export CHRONICLER_LLM_BACKEND=none
+# The OpenCode Go lane (no training, 0-day retention per model id — private tier). ollama left
+# the machine 2026-11-04 and `claude-code` has been dead since 2026-10-11; this lane replaced
+# both on 2026-11-18. The key is read from guild's .env, not held here.
+export CHRONICLER_LLM_BACKEND=opencode
 cd /home/ta/projects/chronicler
 # Fires every Saturday 10:00; scheduled.py gates to bi-weekly (>=13d since last run).
 #
