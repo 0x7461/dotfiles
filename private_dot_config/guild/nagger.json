@@ -21,6 +21,12 @@
       "message": "Run the pi smoke test — a real task on the current default model",
       "every_days": 365,
       "anchor": "2026-10-01"
+    },
+    {
+      "id": "restore-drill",
+      "message": "Run the restore drill: `~/projects/ithaca/store/scripts/restore-drill.sh` — prove a clone + links reproduce the store",
+      "every_days": 91,
+      "anchor": "2026-11-20"
     }
   ]
 }

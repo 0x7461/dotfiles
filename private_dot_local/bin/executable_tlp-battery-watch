@@ -1,0 +1,77 @@
+#!/bin/sh
+# One tick of the battery-profile watcher — run every 2 minutes by ~/service/tlp-battery.
+#
+# Below TLP_BAT_THRESHOLD (default 30) on battery, apply `tlp power-saver` (the *_ON_SAV settings);
+# above threshold + TLP_BAT_HYSTERESIS (5), or on AC, return to automatic via `tlp start`. Hysteresis
+# keeps a level sitting on the boundary from toggling every cycle. One crier alert per switch, never
+# per tick.
+#
+# `tlp start` is the restore, not `tlp bat`: `tlp ac|bat` enter *manual* mode (power-source changes
+# ignored until tlp start or reboot), and `tlp power-saver` selects the _SAV profile until changed —
+# only `tlp start` re-detects the source and resumes automatic mode (man tlp, checked 2026-11-19).
+#
+# Exit status is the interface (caretaker's convention — it is a monitor's input, not a diagnostic):
+#   0   nothing to do, or the switch happened (a failed notify only logs — the profile is what matters)
+#   2   action needed: `tlp` could not run (missing/wrong sudoers rule), a threshold/hysteresis
+#       setting is not an integer, or the battery node returned something that is not a percentage.
+#       A junk read is *not* 0: `[ "$pct" -le 30 ]` on non-numeric input evaluates false instead of
+#       failing, so without an explicit check the script silently holds the previous state — and a
+#       negative value would silently apply power-saver. Neither is a "nothing to do" run.
+#   75  deferred: no battery/AC sysfs node — nothing this machine can do
+# Read by the caretaker finish hook; see services.py's exit-status convention.
+
+set -eu
+# The two sysfs reads are overridable so the branches can be exercised without waiting for the
+# battery to drain — the power-saver path is the one that matters and the one hardest to reach by
+# hand. Defaults are the real nodes; the overrides exist for tests only.
+cap=${TLP_BAT_CAPACITY_FILE:-/sys/class/power_supply/BAT0/capacity}
+ac=${TLP_BAT_AC_FILE:-/sys/class/power_supply/AC/online}
+[ -r "$cap" ] && [ -r "$ac" ] || exit 75
+
+threshold=${TLP_BAT_THRESHOLD:-30}
+hysteresis=${TLP_BAT_HYSTERESIS:-5}
+state_dir=${XDG_STATE_HOME:-"$HOME/.local/state"}/tlp-battery
+state_file="$state_dir/mode"
+
+# Validated, not assumed: arithmetic on junk is silently wrong in a way that looks like a decision.
+case "$threshold$hysteresis" in
+  *[!0-9]*) echo "tlp-battery: TLP_BAT_THRESHOLD/TLP_BAT_HYSTERESIS must be integers"; exit 2 ;;
+esac
+
+plugged=$(cat "$ac")
+cur=$(cat "$state_file" 2>/dev/null) || cur=auto
+
+if [ "$plugged" = "1" ]; then
+  desired=auto # the level is irrelevant while charging, so it is not read
+else
+  pct=$(cat "$cap")
+  case "$pct" in
+    ''|*[!0-9]*) echo "tlp-battery: battery capacity is not a percentage"; exit 2 ;;
+  esac
+  if [ "$pct" -le "$threshold" ]; then
+    desired=sav
+  elif [ "$pct" -ge $((threshold + hysteresis)) ]; then
+    desired=auto
+  else
+    desired=$cur # inside the hysteresis band: hold
+  fi
+fi
+
+[ "$desired" = "$cur" ] && exit 0
+
+if [ -n "${TLP_BAT_DRY:-}" ]; then
+  echo "tlp-battery: dry run — would switch $cur -> $desired (battery $pct%)"
+  exit 0
+fi
+
+if [ "$desired" = "sav" ]; then
+  sudo -n tlp power-saver || { echo "tlp-battery: sudo tlp power-saver failed"; exit 2; }
+  crier alert --source tlp --title "power-saver on" --priority default --tags battery \
+    "battery $pct% — power-saver profile applied" || echo "tlp-battery: crier alert failed"
+else
+  sudo -n tlp start || { echo "tlp-battery: sudo tlp start failed"; exit 2; }
+  crier alert --source tlp --title "power-saver off" --priority low --tags battery \
+    "battery $pct% — automatic profile restored" || echo "tlp-battery: crier alert failed"
+fi
+mkdir -p "$state_dir"
+echo "$desired" > "$state_file"

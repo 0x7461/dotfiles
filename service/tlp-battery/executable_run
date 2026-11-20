@@ -1,0 +1,13 @@
+#!/bin/sh
+exec 2>&1
+# Battery-profile watcher: below TLP_BAT_THRESHOLD (default 30) on battery, switch TLP to
+# power-saver; above threshold + hysteresis (5) or on AC, back to automatic. One crier alert per
+# switch. See ~/.local/bin/tlp-battery-watch for the exit-status contract (75 = no battery node).
+#
+# Every 2 minutes while awake (-M/2 across hours 0-23). No timefile: a poller's missed windows are
+# meaningless — the next tick is 2 minutes away whether or not the laptop just woke.
+#
+# Needs the sudoers rule /etc/sudoers.d/tlp-battery (ta, NOPASSWD, only `tlp power-saver` and
+# `tlp start`); without it every switch attempt exits 2 and caretaker reports runs-failing.
+export PATH="/home/ta/.local/bin:$PATH"
+exec snooze -H0-23 -M/2 /home/ta/.local/bin/tlp-battery-watch

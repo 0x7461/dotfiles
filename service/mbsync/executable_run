@@ -44,4 +44,21 @@ exec 2>&1
 exec 2>&1
 tf=/home/ta/.local/state/snooze/mbsync
 mkdir -p "${tf%/*}"
-exec snooze -t "$tf" -s 6h -H/6 -M0 sh -c 'touch "$1" && mbsync -a && notmuch new' sh "$tf"
+# The notification lives here, not in a mbsync PostSynchronization hook: one
+# place, and the run status already covers both halves. One notification per
+# sync, never per message; crier's alert lane (the existing ntfy topic);
+# --priority low so a 00:00/06:00 sync arrives silently. A failed notify never
+# costs the run: mail arrived, which is what the status records.
+exec snooze -t "$tf" -s 6h -H/6 -M0 sh -c '
+  touch "$1"
+  mbsync -a || exit 1
+  out=$(notmuch new) || { echo "$out"; exit 1; }
+  n=$(printf "%s\n" "$out" | sed -n "s/^Added \([0-9][0-9]*\) new message.*/\1/p" | head -1)
+  if [ -n "$n" ] && [ "$n" -gt 0 ] 2>/dev/null; then
+    subs=$(notmuch search --format=json --limit=3 "tag:unread" 2>/dev/null | jq -r ".[].subject")
+    body="$n new message(s)"
+    [ -n "$subs" ] && body="$body — $subs"
+    crier alert --source email --title "new mail" --priority low --tags envelope "$body" \
+      || echo "mbsync: crier alert failed"
+  fi
+' sh "$tf"
