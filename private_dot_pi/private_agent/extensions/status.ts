@@ -39,8 +39,10 @@ import { join } from "node:path";
 //
 // Past a limit Go bills the Console balance (`billing_source: "balance"`), and the segment then
 // says `on credit` — the fact, not an amount: no API reports the remaining balance, and a
-// hand-seeded figure drifts. Verified 2026-11-05 against the console's $4.28: all 6,024 captured
-// requests so far were billed to the plan (`go`, `cost: 0`), so this path has never fired.
+// hand-seeded figure drifts. **Exercised end to end 2026-11-19/20:** the month hit 100% (console:
+// $4.26 credit), 36 requests billed to `balance` between ~22:30 and 23:29 KST, and the first `go`
+// row after the 00:32 KST renewal cleared the indicator — so both sides of the transition are now
+// in the ledger, which is all this reads.
 const HOME = homedir();
 const SESSIONS_DIR = join(HOME, ".pi", "agent", "sessions");
 // One JSON line per Go request, written from `provider_stream_event`: the only place the vendor
@@ -184,7 +186,10 @@ const GO_MONTHLY_USD_DEFAULT = 15;
 // charged `list_cost × 60 / bucket`. Rates are $/1M tokens; `write` is a priced cache write
 // (Kimi, Qwen, GPT Luna), otherwise an unwritten cache bills as plain input; `tiers` are
 // context-length bands, shortest first. DeepSeek is the only peak-priced family.
-const GO_CYCLE_RESET_SEED = "2026-11-19T22:32:00+07:00";
+// An absolute instant, written with an explicit offset: this is Go's billing anchor, not a local
+// wall-clock time, so it must not follow the user (the location does — see the memory). Verified
+// 2026-11-19 against the console countdown ("Renews in 1h 20m" at 23:14 KST).
+const GO_CYCLE_RESET_SEED = "2026-11-20T00:32:00+09:00";
 const ROLLING_MS = 5 * 3600_000;
 
 // Which way the spend segment reads. A display preference, so it lives with the ledger in the
